@@ -111,6 +111,29 @@ The first organization-scoped business entity, built on the Organization Foundat
 - **Schemas** — `Property{Base,Create,Read}` (`app/schemas/property.py`), strict with `extra="forbid"`; `PropertyCreate` carries `organization_id`.
 - **Model** — `Property` (`app/models/property.py`) with bidirectional `properties` ↔ `organization` relationship.
 
+### Physical Structure Foundation
+
+The inventory hierarchy under a property. Database + models + repositories only — no routes, services, occupancy, or assignment yet.
+
+```text
+Organization
+    └── Property
+          └── Building
+                └── Floor
+                      └── Room
+                            └── Bed (0..N)
+```
+
+- **buildings** — `id`, `organization_id` (FK, indexed), `property_id` (FK, indexed), `name`, `description`, mixin timestamps. `UNIQUE (property_id, name)`.
+- **floors** — `id`, `organization_id` (FK, indexed), `building_id` (FK, indexed), `floor_number`, `name`, mixin timestamps. `UNIQUE (building_id, floor_number)`.
+- **rooms** — `id`, `organization_id` (FK, indexed), `floor_id` (FK, indexed), `room_number` (indexed), `room_type`, mixin timestamps. `UNIQUE (floor_id, room_number)`.
+- **beds** — `id`, `organization_id` (FK, indexed), `room_id` (FK, indexed), `bed_number`, `status` (indexed), mixin timestamps. `UNIQUE (room_id, bed_number)`.
+- **Room capacity is not stored.** Capacity is always derived from the number of `Bed` records associated with a `Room` (`COUNT(beds.id)`). This allows rooms to support any number of beds without schema changes: a single room has 1 bed, a double has 2, a four-share PG room has 4, a dorm has 20+. No `capacity` / `max_beds` / `bed_count` column exists anywhere.
+- **Enums** — `RoomTypeEnum` (`SINGLE`, `DOUBLE`, `TRIPLE`, `FOUR_SHARE`, `FIVE_SHARE`, `CUSTOM`) and `BedStatusEnum` (`AVAILABLE`, `OCCUPIED`, `BLOCKED`, `MAINTENANCE`), stored as native PostgreSQL ENUMs `room_type` / `bed_status`.
+- **Repositories** — `BuildingRepository` / `FloorRepository` / `RoomRepository` / `BedRepository`: each has `get_by_id`, a scoped `list_for_<parent>` (`list_for_property` / `list_for_building` / `list_for_floor` / `list_for_room`), and `create`. Every read is scoped by `organization_id` — no unscoped read path.
+- **Schemas** — `{Building,Floor,Room,Bed}{Base,Create,Read}` (`app/schemas/`), strict with `extra="forbid"`; `Create` carries `organization_id` and the parent FK. `RoomRead` has no capacity field.
+- **Models** — `Building` / `Floor` / `Room` / `Bed` (`app/models/`) with fully bidirectional relationships (`property` ↔ `buildings` ↔ `floors` ↔ `rooms` ↔ `beds`).
+
 ### Migrations (Alembic)
 
 Alembic reads `DATABASE_URL` from settings and targets `Base.metadata` (importing `app.models`), so `autogenerate` reflects real schema drift. Schema changes always ship with a migration. The first migration (`create users table and role enum`) ships in `alembic/versions/`.
@@ -143,9 +166,9 @@ app/
 ├── api/v1/     versioned HTTP routes (health)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
-├── models/     SQLAlchemy models (users, organizations, memberships, properties, enums)
-├── repositories/  data access (users, organizations, memberships, properties)
-├── schemas/    Pydantic request/response models (users, organizations, properties)
+├── models/     SQLAlchemy models (users, organizations, memberships, properties, buildings, floors, rooms, beds, enums)
+├── repositories/  data access (users, organizations, memberships, properties, buildings, floors, rooms, beds)
+├── schemas/    Pydantic request/response models (users, organizations, properties, buildings, floors, rooms, beds)
 ├── services/   business logic (future)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)

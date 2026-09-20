@@ -46,3 +46,28 @@ class PropertyStatusEnum(StrEnum):
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
     CLOSED = "CLOSED"
+
+
+class RoomTypeEnum(StrEnum):
+    """Room shapes (sharing categories). PostgreSQL stores these as a native ENUM (`room_type`).
+
+    Capacity is not stored anywhere; the sharing names below only describe the
+    configured bed count for a room (a double room is whatever number of beds
+    the owner assigns it).
+    """
+
+    SINGLE = "SINGLE"
+    DOUBLE = "DOUBLE"
+    TRIPLE = "TRIPLE"
+    FOUR_SHARE = "FOUR_SHARE"
+    FIVE_SHARE = "FIVE_SHARE"
+    CUSTOM = "CUSTOM"
+
+
+class BedStatusEnum(StrEnum):
+    """Bed lifecycle. PostgreSQL stores these as a native ENUM (`bed_status`)."""
+
+    AVAILABLE = "AVAILABLE"
+    OCCUPIED = "OCCUPIED"
+    BLOCKED = "BLOCKED"
+    MAINTENANCE = "MAINTENANCE"

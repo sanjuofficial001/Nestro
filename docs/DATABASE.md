@@ -480,7 +480,7 @@ CLOSED
 
 ```sql
 ix_properties_organization_id
-ix_properties_type
+ix_properties_property_type
 ix_properties_status
 ```
 
@@ -520,7 +520,7 @@ Building C
 | organization_id | UUID FK     |
 | property_id     | UUID FK     |
 | name            | TEXT        |
-| address         | TEXT        |
+| description     | TEXT        |
 | created_at      | TIMESTAMPTZ |
 | updated_at      | TIMESTAMPTZ |
 
@@ -534,8 +534,8 @@ Property
 ## Indexes
 
 ```sql
-idx_buildings_org
-idx_buildings_property
+ix_buildings_organization_id
+ix_buildings_property_id
 ```
 
 ## Constraints
@@ -560,7 +560,7 @@ Represents floors within a building.
 | organization_id | UUID FK     |
 | building_id     | UUID FK     |
 | floor_number    | INTEGER     |
-| label           | TEXT        |
+| name            | TEXT        |
 | created_at      | TIMESTAMPTZ |
 | updated_at      | TIMESTAMPTZ |
 
@@ -578,8 +578,8 @@ Floor 3
 ## Indexes
 
 ```sql
-idx_floors_org
-idx_floors_building
+ix_floors_organization_id
+ix_floors_building_id
 ```
 
 ## Constraints
@@ -596,23 +596,29 @@ UNIQUE(building_id, floor_number)
 
 Represents rentable rooms.
 
+Room capacity is **not stored**. Capacity is always derived from the number of
+`Bed` records associated with a Room (`COUNT(beds.id)`). This allows rooms to
+support any number of beds without schema changes: a single room has 1 bed, a
+double has 2, a four-share PG room has 4, a dorm has 20+.
+
 ## Columns
 
-| Column          | Type          |
-| --------------- | ------------- |
-| id              | UUID PK       |
-| organization_id | UUID FK       |
-| floor_id        | UUID FK       |
-| room_number     | TEXT          |
-| room_type       | TEXT          |
-| capacity        | INTEGER       |
-| default_rent    | NUMERIC(12,2) |
-| status          | TEXT          |
-| created_at      | TIMESTAMPTZ   |
-| updated_at      | TIMESTAMPTZ   |
-| deleted_at      | TIMESTAMPTZ   |
+| Column          | Type        |
+| --------------- | ----------- |
+| id              | UUID PK     |
+| organization_id | UUID FK     |
+| floor_id        | UUID FK     |
+| room_number     | TEXT        |
+| room_type       | TEXT        |
+| created_at      | TIMESTAMPTZ |
+| updated_at      | TIMESTAMPTZ |
+
+There is deliberately no `capacity`, `max_beds`, `bed_count`, or equivalent
+derived-count column.
 
 ## room_type
+
+Native PostgreSQL ENUM named `room_type`:
 
 ```text
 SINGLE
@@ -623,36 +629,23 @@ FIVE_SHARE
 CUSTOM
 ```
 
-## status
-
-```text
-AVAILABLE
-PARTIAL
-FULL
-BLOCKED
-MAINTENANCE
-```
-
 ## Relationships
 
 ```text
 Floor
  └── Rooms
+     └── Beds
 ```
 
 ## Indexes
 
 ```sql
-idx_rooms_org
-idx_rooms_floor
-idx_rooms_status
+ix_rooms_organization_id
+ix_rooms_floor_id
+ix_rooms_room_number
 ```
 
 ## Constraints
-
-```sql
-CHECK (capacity > 0)
-```
 
 ```sql
 UNIQUE(floor_id, room_number)
@@ -664,9 +657,10 @@ UNIQUE(floor_id, room_number)
 
 ## Purpose
 
-Represents occupancy units.
+Represents occupancy units — the atomic seat inside a room.
 
-A room can contain multiple beds.
+A room can contain any number of beds; the bed rows owned by a room define its
+capacity (see §12).
 
 ## Columns
 
@@ -675,7 +669,7 @@ A room can contain multiple beds.
 | id              | UUID PK     |
 | organization_id | UUID FK     |
 | room_id         | UUID FK     |
-| bed_code        | TEXT        |
+| bed_number      | TEXT        |
 | status          | TEXT        |
 | created_at      | TIMESTAMPTZ |
 | updated_at      | TIMESTAMPTZ |
@@ -693,6 +687,8 @@ Bed D
 
 ## status
 
+Native PostgreSQL ENUM named `bed_status`:
+
 ```text
 AVAILABLE
 OCCUPIED
@@ -703,15 +699,15 @@ MAINTENANCE
 ## Indexes
 
 ```sql
-idx_beds_org
-idx_beds_room
-idx_beds_status
+ix_beds_organization_id
+ix_beds_room_id
+ix_beds_status
 ```
 
 ## Constraints
 
 ```sql
-UNIQUE(room_id, bed_code)
+UNIQUE(room_id, bed_number)
 ```
 
 ---
@@ -1419,7 +1415,7 @@ must have an index.
 Examples:
 
 ```sql
-CREATE INDEX idx_rooms_org
+CREATE INDEX ix_rooms_organization_id
 ON rooms(organization_id);
 
 CREATE INDEX idx_payments_org
