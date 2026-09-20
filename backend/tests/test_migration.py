@@ -23,7 +23,7 @@ def run_alembic_upgrade(tmp_path: Path) -> Path:
     return db
 
 
-def test_upgrade_head_creates_users_table(tmp_path: Path) -> None:
+def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
     db = run_alembic_upgrade(tmp_path)
     conn = sqlite3.connect(db)
     try:
@@ -33,9 +33,10 @@ def test_upgrade_head_creates_users_table(tmp_path: Path) -> None:
                 "select name from sqlite_master where type='table'"
             )
         }
-        assert "users" in tables
+        assert {"users", "organizations", "organization_members"} <= tables
         assert "alembic_version" in tables
-        columns = {
+
+        user_columns = {
             row[1]
             for row in conn.execute("pragma table_info(users)")
         }
@@ -49,7 +50,34 @@ def test_upgrade_head_creates_users_table(tmp_path: Path) -> None:
             "is_verified",
             "created_at",
             "updated_at",
-        } <= columns
+        } <= user_columns
+
+        org_columns = {
+            row[1]
+            for row in conn.execute("pragma table_info(organizations)")
+        }
+        assert {
+            "id",
+            "name",
+            "slug",
+            "is_active",
+            "created_at",
+            "updated_at",
+        } <= org_columns
+
+        member_columns = {
+            row[1]
+            for row in conn.execute("pragma table_info(organization_members)")
+        }
+        assert {
+            "id",
+            "organization_id",
+            "user_id",
+            "role",
+            "created_at",
+            "updated_at",
+        } <= member_columns
+
         version = conn.execute("select version_num from alembic_version").fetchone()
         assert version is not None and version[0]
     finally:
