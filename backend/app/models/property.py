@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.models.building import Building
     from app.models.organization import Organization
     from app.models.resident_profile import ResidentProfile
+    from app.models.tenant_stay import TenantStay
 
 
 class Property(TimestampMixin, UUIDPrimaryKeyMixin, Base):
@@ -49,6 +50,7 @@ class Property(TimestampMixin, UUIDPrimaryKeyMixin, Base):
     resident_profiles: Mapped[list[ResidentProfile]] = relationship(
         back_populates="property"
     )
+    tenant_stays: Mapped[list[TenantStay]] = relationship(back_populates="property")
 
     def __repr__(self) -> str:
         return f"<Property id={self.id!r} name={self.name!r} type={self.property_type.value}>"

@@ -19,6 +19,7 @@ from app.models.enums import BedStatusEnum
 
 if TYPE_CHECKING:
     from app.models.room import Room
+    from app.models.tenant_stay import TenantStay
 
 
 class Bed(TimestampMixin, UUIDPrimaryKeyMixin, Base):
@@ -40,6 +41,7 @@ class Bed(TimestampMixin, UUIDPrimaryKeyMixin, Base):
     )
 
     room: Mapped[Room] = relationship(back_populates="beds")
+    tenant_stays: Mapped[list[TenantStay]] = relationship(back_populates="bed")
 
     def __repr__(self) -> str:
         return f"<Bed id={self.id!r} number={self.bed_number!r} status={self.status.value}>"

@@ -785,7 +785,11 @@ One resident profile per membership.
 
 ## Purpose
 
-Tracks bed occupancy history.
+Tracks bed occupancy history:
+
+```text
+Resident Profile → Tenant Stay → Bed
+```
 
 This table is extremely important.
 
@@ -803,18 +807,40 @@ This preserves historical occupancy.
 
 ## Columns
 
-| Column              | Type          |
-| ------------------- | ------------- |
-| id                  | UUID PK       |
-| organization_id     | UUID FK       |
-| resident_profile_id | UUID FK       |
-| bed_id              | UUID FK       |
-| move_in_date        | DATE          |
-| move_out_date       | DATE          |
-| security_deposit    | NUMERIC(12,2) |
-| notes               | TEXT          |
-| created_at          | TIMESTAMPTZ   |
-| updated_at          | TIMESTAMPTZ   |
+| Column              | Type        |
+| ------------------- | ----------- |
+| id                  | UUID PK     |
+| organization_id     | UUID FK     |
+| resident_profile_id | UUID FK     |
+| property_id         | UUID FK     |
+| bed_id              | UUID FK     |
+| start_date          | DATE        |
+| end_date            | DATE        |
+| status              | ENUM        |
+| notes               | TEXT        |
+| created_at          | TIMESTAMPTZ |
+| updated_at          | TIMESTAMPTZ |
+
+`property_id` is stored on the stay (not just reached through the bed chain) so
+occupancy is queryable per venue without joining. `end_date` and `notes` are
+nullable; an open stay has no `end_date` yet.
+
+## status
+
+Native SQL enum: `tenant_stay_status`
+
+```text
+ACTIVE
+COMPLETED
+CANCELLED
+```
+
+- **ACTIVE** — an open stay: the resident currently occupies the bed (`end_date`
+  is `NULL`).
+- **COMPLETED** — the stay ended on its own; the row stays as history.
+- **CANCELLED** — the stay was terminated early; the row stays as history.
+
+The `ACTIVE` status is the only one that makes a bed "occupied".
 
 ## Example
 
@@ -822,9 +848,7 @@ This preserves historical occupancy.
 Resident
 
 Jan 2025 → Bed A
-
 Jul 2025 → Bed C
-
 Nov 2025 → Bed B
 ```
 
@@ -832,19 +856,25 @@ Full history retained.
 
 ## Constraints
 
-Only one active stay:
-
 ```sql
-One active stay per bed
-One active stay per resident
+-- at most one ACTIVE stay per bed (partial unique index)
+CREATE UNIQUE INDEX uq_tenant_stays_active_bed
+  ON tenant_stays (bed_id)
+  WHERE status = 'ACTIVE';
 ```
+
+Implemented as a partial unique index — a whole-table `UNIQUE (bed_id, status)`
+would allow only one row per status value and block re-occupying a bed ever.
+
+Deferred to the billing/stays milestone: `security_deposit NUMERIC(12,2)` and
+the `one active stay per resident` rule (DATABASE.md §15 history note).
 
 ## Indexes
 
 ```sql
-idx_stays_org
-idx_stays_bed
-idx_stays_resident
+ix_tenant_stays_organization_id
+ix_tenant_stays_resident_profile_id
+ix_tenant_stays_bed_id
 ```
 
 ---

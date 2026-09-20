@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.organization_member import OrganizationMember
     from app.models.property import Property
     from app.models.resident_profile import ResidentProfile
+    from app.models.tenant_stay import TenantStay
 
 
 class Organization(TimestampMixin, UUIDPrimaryKeyMixin, Base):
@@ -32,6 +33,7 @@ class Organization(TimestampMixin, UUIDPrimaryKeyMixin, Base):
     resident_profiles: Mapped[list[ResidentProfile]] = relationship(
         back_populates="organization"
     )
+    tenant_stays: Mapped[list[TenantStay]] = relationship(back_populates="organization")
 
     def __repr__(self) -> str:
         return f"<Organization id={self.id!r} slug={self.slug!r}>"

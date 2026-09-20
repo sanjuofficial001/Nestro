@@ -11,6 +11,7 @@ from app.schemas.organization_member import (
 from app.schemas.property import PropertyCreate, PropertyRead
 from app.schemas.resident_profile import ResidentProfileCreate, ResidentProfileRead
 from app.schemas.room import RoomCreate, RoomRead
+from app.schemas.tenant_stay import TenantStayCreate, TenantStayRead
 
 __all__ = [
     "BedCreate",
@@ -29,4 +30,6 @@ __all__ = [
     "ResidentProfileRead",
     "RoomCreate",
     "RoomRead",
+    "TenantStayCreate",
+    "TenantStayRead",
 ]

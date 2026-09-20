@@ -4,7 +4,7 @@ A resident is represented by an `OrganizationMember` row in the organization
 they live in; the profile references that membership (`organization_member_id`),
 never the raw user. This keeps platform identity on `users` and residency data
 on the profile — the chain is User → Organization Member → Resident Profile
-(see docs/DATABASE.md §14). Bed assignment and stays ship in later milestones.
+(see docs/DATABASE.md §14). Occupancy history lives in `tenant_stays` (§15).
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
     from app.models.organization_member import OrganizationMember
     from app.models.property import Property
+    from app.models.tenant_stay import TenantStay
 
 
 class ResidentProfile(TimestampMixin, UUIDPrimaryKeyMixin, Base):
@@ -50,6 +51,7 @@ class ResidentProfile(TimestampMixin, UUIDPrimaryKeyMixin, Base):
         back_populates="resident_profile"
     )
     property: Mapped[Property | None] = relationship(back_populates="resident_profiles")
+    tenant_stays: Mapped[list[TenantStay]] = relationship(back_populates="resident_profile")
 
     def __repr__(self) -> str:
         return f"<ResidentProfile id={self.id!r} member={self.organization_member_id!r}>"

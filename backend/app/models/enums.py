@@ -71,3 +71,15 @@ class BedStatusEnum(StrEnum):
     OCCUPIED = "OCCUPIED"
     BLOCKED = "BLOCKED"
     MAINTENANCE = "MAINTENANCE"
+
+
+class TenantStayStatusEnum(StrEnum):
+    """Stay lifecycle. PostgreSQL stores these as a native ENUM (`tenant_stay_status`).
+
+    `ACTIVE` stays are open (no `end_date`); `COMPLETED` / `CANCELLED` stays are
+    closed and retain the occupancy record in the stay's history.
+    """
+
+    ACTIVE = "ACTIVE"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
