@@ -8,3 +8,9 @@ build
 .expo
 coverage
 *.tsbuildinfo
+uv.lock
+.venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.ruff_cache
