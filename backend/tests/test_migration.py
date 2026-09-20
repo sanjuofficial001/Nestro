@@ -42,6 +42,7 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
             "floors",
             "rooms",
             "beds",
+            "resident_profiles",
         } <= tables
         assert "alembic_version" in tables
 
@@ -168,12 +169,48 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
                 row[2]
                 for row in conn.execute(f"pragma foreign_key_list({table})")
             }
-            for table in ["buildings", "floors", "rooms", "beds"]
+            for table in ["buildings", "floors", "rooms", "beds", "resident_profiles"]
         }
         assert fk_targets["buildings"] == {"organizations", "properties"}
         assert fk_targets["floors"] == {"buildings", "organizations"}
         assert fk_targets["rooms"] == {"floors", "organizations"}
         assert fk_targets["beds"] == {"organizations", "rooms"}
+
+        resident_columns = {
+            row[1]
+            for row in conn.execute("pragma table_info(resident_profiles)")
+        }
+        assert {
+            "id",
+            "organization_id",
+            "organization_member_id",
+            "property_id",
+            "emergency_contact_name",
+            "emergency_contact_phone",
+            "address",
+            "notes",
+            "is_active",
+            "created_at",
+            "updated_at",
+        } <= resident_columns
+        assert fk_targets["resident_profiles"] == {
+            "organizations",
+            "organization_members",
+            "properties",
+        }
+
+        unique_indexes = [
+            row[1]
+            for row in conn.execute("pragma index_list(resident_profiles)")
+            if row[2] == 1
+        ]
+        unique_cols = {
+            frozenset(
+                row[2] for row in conn.execute(f"pragma index_info({idx})")
+            )
+            for idx in unique_indexes
+        }
+        assert {"organization_member_id"} in unique_cols
 
         version = conn.execute("select version_num from alembic_version").fetchone()
         assert version is not None and version[0]
