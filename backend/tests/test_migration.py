@@ -41,9 +41,10 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
             "buildings",
             "floors",
             "rooms",
-            "beds",
-            "resident_profiles",
-        } <= tables
+"beds",
+                "resident_profiles",
+                "tenant_stays",
+            } <= tables
         assert "alembic_version" in tables
 
         user_columns = {
@@ -169,7 +170,14 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
                 row[2]
                 for row in conn.execute(f"pragma foreign_key_list({table})")
             }
-            for table in ["buildings", "floors", "rooms", "beds", "resident_profiles"]
+            for table in [
+                    "buildings",
+                    "floors",
+                    "rooms",
+                    "beds",
+                    "resident_profiles",
+                    "tenant_stays",
+                ]
         }
         assert fk_targets["buildings"] == {"organizations", "properties"}
         assert fk_targets["floors"] == {"buildings", "organizations"}
@@ -211,6 +219,35 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
             for idx in unique_indexes
         }
         assert {"organization_member_id"} in unique_cols
+
+        stay_columns = {
+            row[1] for row in conn.execute("pragma table_info(tenant_stays)")
+        }
+        assert {
+            "id",
+            "organization_id",
+            "resident_profile_id",
+            "property_id",
+            "bed_id",
+            "start_date",
+            "end_date",
+            "status",
+            "notes",
+            "created_at",
+            "updated_at",
+        } <= stay_columns
+        assert fk_targets["tenant_stays"] == {
+            "organizations",
+            "resident_profiles",
+            "properties",
+            "beds",
+        }
+
+        stay_indexes = {
+            (row[1], bool(row[2]), bool(row[4]))
+            for row in conn.execute("pragma index_list(tenant_stays)")
+        }
+        assert ("uq_tenant_stays_active_bed", True, True) in stay_indexes
 
         version = conn.execute("select version_num from alembic_version").fetchone()
         assert version is not None and version[0]
