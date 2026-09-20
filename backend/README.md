@@ -75,7 +75,7 @@ Access is layered: `api/` → `services/` → `repositories/` → `db/`. The bac
 
 ### users table
 
-- Platform-wide account table (no `organization_id` — org scoping flows through `organization_members` in a later milestone).
+- Platform-wide account table (no `organization_id` — org scoping flows through `organization_members`, the Organization Foundation).
 - Columns: `id` (UUID PK), `email` (unique, not null), `phone` (unique, nullable), `full_name`, `role`, `is_active`, `is_verified` (timestamps via the mixin).
 - No password or auth columns — credentials live in Supabase Auth, never here.
 
@@ -84,11 +84,22 @@ Access is layered: `api/` → `services/` → `repositories/` → `db/`. The bac
 - `RoleEnum` (`app/models/enums.py`): `SUPER_ADMIN`, `PG_OWNER`, `MANAGER`, `STAFF`, `TENANT`.
 - Stored as a native PostgreSQL ENUM (`user_role`), so the database enforces the allowed values; SQLite fallbacks to a VARCHAR column for tests.
 - The `role` column is indexed for platform-wide role lookups.
-- Role _grants_ and org-scoped permissions arrive with the auth milestone (`organization_members`).
+- The `organization_members` table and `OrganizationRoleEnum` exist (Organization Foundation); role _grants_ and a permissions engine arrive with the auth milestone.
 
 ### Repository layer
 
 - `UserRepository` (`app/repositories/user.py`) is the typed data-access contract for users: `get_by_id`, `get_by_email`, `exists_by_email`, `create`. It takes a `Session` and stays free of business logic.
+
+### Organization Foundation
+
+The tenant boundary sits between platform `users` and future Parking Groups. Database + models + repositories only — no routes or services yet.
+
+- **organizations** — top-level business/customer account. `id` (UUID PK), `name`, `slug` (unique), `is_active`, mixin timestamps. The slug is lowercase, space-free, 3–100 chars.
+- **organization_members** — join table connecting a user to one organization: `organization_id` / `user_id` FKs plus a `role` and mixin timestamps. `UNIQUE (organization_id, user_id)` blocks duplicate memberships.
+- **Membership roles** — `OrganizationRoleEnum` (`app/models/enums.py`), stored as a native PostgreSQL ENUM `organization_role`: `OWNER`, `MANAGER`, `STAFF`. Independent from platform `RoleEnum`; resident roles arrive with the resident-profile milestone.
+- **Repositories** — `OrganizationRepository` (`get_by_id`, `get_by_slug`, `exists_by_slug`, `create`) and `OrganizationMemberRepository` (`get_by_id`, `get_members_for_org`, `get_org_for_user`, `exists_membership`, `create`).
+- **Schemas** — `Organization{Base,Create,Read}` and `OrganizationMember{Base,Create,Read}` (`app/schemas/`), strict with `extra="forbid"`.
+- **Models** — `Organization` / `OrganizationMember` (`app/models/`) with bidirectional `members` ↔ `organization` / `user` relationships.
 
 ### Migrations (Alembic)
 
@@ -122,9 +133,9 @@ app/
 ├── api/v1/     versioned HTTP routes (health)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
-├── models/     SQLAlchemy models (users, enums)
-├── repositories/  data access (users)
-├── schemas/    Pydantic request/response models
+├── models/     SQLAlchemy models (users, organizations, memberships, enums)
+├── repositories/  data access (users, organizations, memberships)
+├── schemas/    Pydantic request/response models (users, organizations, memberships)
 ├── services/   business logic (future)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)

@@ -69,7 +69,6 @@ Records are archived rather than removed.
 
 Examples:
 
-- organizations
 - properties
 - rooms
 - users
@@ -185,14 +184,14 @@ erDiagram
 
 Top-level tenant boundary.
 
-Represents a legal business entity using Nestro.
+Represents a business/customer account using Nestro.
 
 Examples:
 
 ```text
-ABC Living Pvt Ltd
-Elite Hostels
-Green Residency
+ABC Mall
+Sunrise Apartments
+Tech Park Chennai
 ```
 
 Each organization owns:
@@ -210,65 +209,37 @@ No data is shared across organizations.
 
 ## Columns
 
-| Column            | Type        | Notes    |
-| ----------------- | ----------- | -------- |
-| id                | UUID PK     |          |
-| name              | TEXT        |          |
-| organization_type | TEXT        |          |
-| contact_email     | TEXT        | nullable |
-| contact_phone     | TEXT        | nullable |
-| status            | TEXT        |          |
-| created_at        | TIMESTAMPTZ |          |
-| updated_at        | TIMESTAMPTZ |          |
-| deleted_at        | TIMESTAMPTZ | nullable |
+| Column     | Type         | Notes        |
+| ---------- | ------------ | ------------ |
+| id         | UUID PK      |              |
+| name       | VARCHAR(255) | required     |
+| slug       | VARCHAR(100) | unique       |
+| is_active  | BOOLEAN      | default true |
+| created_at | TIMESTAMPTZ  | mixin        |
+| updated_at | TIMESTAMPTZ  | mixin        |
 
-## organization_type
+## Slug
 
-```text
-PG_COMPANY
-HOSTEL_OPERATOR
-HOTEL_GROUP
-APARTMENT_MANAGER
-COLIVING_OPERATOR
-```
-
-## status
-
-```text
-ACTIVE
-INACTIVE
-SUSPENDED
-CLOSED
-```
-
-## Constraints
-
-```sql
-CHECK (
-organization_type IN (
-'PG_COMPANY',
-'HOSTEL_OPERATOR',
-'HOTEL_GROUP',
-'APARTMENT_MANAGER',
-'COLIVING_OPERATOR'
-))
-```
-
-```sql
-CHECK (
-status IN (
-'ACTIVE',
-'INACTIVE',
-'SUSPENDED',
-'CLOSED'
-))
-```
+Lowercase, no spaces, 3–100 characters. Unique across organizations.
 
 ## Indexes
 
 ```sql
-idx_organizations_status
-idx_organizations_name
+ix_organizations_slug (unique)
+```
+
+## Deferred Columns
+
+The following organization fields are designed for a later milestone and are
+not part of the current schema:
+
+```text
+organization_type      (PG_COMPANY, HOSTEL_OPERATOR, HOTEL_GROUP,
+                        APARTMENT_MANAGER, COLIVING_OPERATOR)
+contact_email
+contact_phone
+status                 (ACTIVE, INACTIVE, SUSPENDED, CLOSED)
+deleted_at             (soft delete)
 ```
 
 ---
@@ -327,7 +298,7 @@ TENANT
 ```
 
 Org-scoped permissions are assigned through `organization_members` (see §7),
-whose `role` column holds `OWNER`, `MANAGER`, `STAFF`, `TENANT`.
+whose `role` column holds `OWNER`, `MANAGER`, `STAFF`.
 
 ## Constraints
 
@@ -354,26 +325,33 @@ Defines permissions inside an organization.
 
 This is the primary authorization table.
 
+A user belongs to exactly one organization today.
+
+Future multi-org support is intentionally deferred.
+
 ## Columns
 
-| Column          | Type        |
-| --------------- | ----------- |
-| id              | UUID PK     |
-| organization_id | UUID FK     |
-| user_id         | UUID FK     |
-| role            | TEXT        |
-| joined_at       | TIMESTAMPTZ |
-| created_at      | TIMESTAMPTZ |
-| updated_at      | TIMESTAMPTZ |
+| Column          | Type              |
+| --------------- | ----------------- |
+| id              | UUID PK           |
+| organization_id | UUID FK           |
+| user_id         | UUID FK           |
+| role            | organization_role |
+| created_at      | TIMESTAMPTZ       |
+| updated_at      | TIMESTAMPTZ       |
 
 ## Roles
+
+Native PostgreSQL ENUM named `organization_role`:
 
 ```text
 OWNER
 MANAGER
 STAFF
-TENANT
 ```
+
+`OWNER` is the organization owner; `MANAGER` and `STAFF` cover operational
+members. Resident roles arrive with the resident-profile milestone.
 
 ## Constraints
 
@@ -384,12 +362,13 @@ user_id
 )
 ```
 
+A user cannot appear twice in the same organization.
+
 ## Indexes
 
 ```sql
-idx_org_member_org
-idx_org_member_user
-idx_org_member_role
+ix_organization_members_organization_id
+ix_organization_members_user_id
 ```
 
 ---

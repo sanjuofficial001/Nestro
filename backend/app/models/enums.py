@@ -15,3 +15,16 @@ class RoleEnum(StrEnum):
     MANAGER = "MANAGER"
     STAFF = "STAFF"
     TENANT = "TENANT"
+
+
+class OrganizationRoleEnum(StrEnum):
+    """Organization-scoped membership roles.
+
+    PostgreSQL stores these as a native ENUM (`organization_role`). Matches
+    the roles documented in DATABASE.md; resident/scoped permissions arrive
+    with later milestones.
+    """
+
+    OWNER = "OWNER"
+    MANAGER = "MANAGER"
+    STAFF = "STAFF"

@@ -1,11 +1,18 @@
 """User account model — the first domain entity."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, Enum, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import RoleEnum
+
+if TYPE_CHECKING:
+    from app.models.organization_member import OrganizationMember
 
 
 class User(TimestampMixin, UUIDPrimaryKeyMixin, Base):
@@ -21,6 +28,10 @@ class User(TimestampMixin, UUIDPrimaryKeyMixin, Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    members: Mapped[list[OrganizationMember]] = relationship(
+        back_populates="user"
+    )
 
     def __repr__(self) -> str:
         return f"<User id={self.id!r} email={self.email!r} role={self.role.value}>"
