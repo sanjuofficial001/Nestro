@@ -409,6 +409,10 @@ Example:
 
 Physical locations managed by an organization.
 
+The first business entity scoped by `organization_id` — every property belongs
+to exactly one organization, and reads are scoped by it (no unscoped read
+paths).
+
 Supports:
 
 ```text
@@ -432,23 +436,27 @@ ABC Living Pvt Ltd
 ├── Green Residency
 ```
 
+In the client-facing API a "PG" is a `property` with `property_type = 'PG'`.
+
 ## Columns
 
-| Column          | Type        |
-| --------------- | ----------- |
-| id              | UUID PK     |
-| organization_id | UUID FK     |
-| name            | TEXT        |
-| property_type   | TEXT        |
-| address         | TEXT        |
-| contact_phone   | TEXT        |
-| rules           | TEXT        |
-| status          | TEXT        |
-| created_at      | TIMESTAMPTZ |
-| updated_at      | TIMESTAMPTZ |
-| deleted_at      | TIMESTAMPTZ |
+| Column          | Type              | Notes                  |
+| --------------- | ----------------- | ---------------------- |
+| id              | UUID PK           |                        |
+| organization_id | UUID FK           | NOT NULL, indexed      |
+| name            | VARCHAR(255)      | required               |
+| property_type   | `property_type`   | native ENUM, NOT NULL  |
+| address         | TEXT              | nullable               |
+| contact_phone   | VARCHAR(20)       | nullable               |
+| rules           | TEXT              | nullable               |
+| status          | `property_status` | native ENUM, NOT NULL  |
+| created_at      | TIMESTAMPTZ       | mixin                  |
+| updated_at      | TIMESTAMPTZ       | mixin                  |
+| deleted_at      | TIMESTAMPTZ       | nullable (soft delete) |
 
 ## property_type
+
+Native PostgreSQL ENUM named `property_type`:
 
 ```text
 PG
@@ -460,6 +468,8 @@ COLIVING
 
 ## status
 
+Native PostgreSQL ENUM named `property_status`:
+
 ```text
 ACTIVE
 INACTIVE
@@ -469,32 +479,18 @@ CLOSED
 ## Indexes
 
 ```sql
-idx_properties_org
-idx_properties_type
-idx_properties_status
+ix_properties_organization_id
+ix_properties_type
+ix_properties_status
 ```
 
 ## Constraints
 
-```sql
-CHECK (
-property_type IN (
-'PG',
-'HOSTEL',
-'HOTEL',
-'APARTMENT',
-'COLIVING'
-))
-```
+The enum columns are enforced by the database via the native ENUM types
+(`property_type`, `property_status`) above.
 
-```sql
-CHECK (
-status IN (
-'ACTIVE',
-'INACTIVE',
-'CLOSED'
-))
-```
+Soft-delete filtering behavior (excluding `deleted_at IS NOT NULL` rows) ships
+with the properties CRUD milestone; the column exists now.
 
 ---
 

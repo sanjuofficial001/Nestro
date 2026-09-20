@@ -101,6 +101,16 @@ The tenant boundary sits between platform `users` and future Parking Groups. Dat
 - **Schemas** — `Organization{Base,Create,Read}` and `OrganizationMember{Base,Create,Read}` (`app/schemas/`), strict with `extra="forbid"`.
 - **Models** — `Organization` / `OrganizationMember` (`app/models/`) with bidirectional `members` ↔ `organization` / `user` relationships.
 
+### Property (PG) Foundation
+
+The first organization-scoped business entity, built on the Organization Foundation. Database + models + repositories only — no routes or services yet.
+
+- **properties** — a venue owned by one organization (PG, hostel, hotel, apartment, co-living). `id` (UUID PK), `organization_id` (FK, indexed tenant boundary), `name`, `property_type`, `address`, `contact_phone`, `rules`, `status`, `deleted_at` (soft-delete column), mixin timestamps.
+- **Enums** — `PropertyTypeEnum` (`PG`, `HOSTEL`, `HOTEL`, `APARTMENT`, `COLIVING`) and `PropertyStatusEnum` (`ACTIVE`, `INACTIVE`, `CLOSED`), stored as native PostgreSQL ENUMs `property_type` / `property_status`.
+- **Repository** — `PropertyRepository` (`app/repositories/property.py`): `get_by_id`, `list_for_org`, `exists_by_name`, `create`. Every read is scoped by `organization_id` — no unscoped read path.
+- **Schemas** — `Property{Base,Create,Read}` (`app/schemas/property.py`), strict with `extra="forbid"`; `PropertyCreate` carries `organization_id`.
+- **Model** — `Property` (`app/models/property.py`) with bidirectional `properties` ↔ `organization` relationship.
+
 ### Migrations (Alembic)
 
 Alembic reads `DATABASE_URL` from settings and targets `Base.metadata` (importing `app.models`), so `autogenerate` reflects real schema drift. Schema changes always ship with a migration. The first migration (`create users table and role enum`) ships in `alembic/versions/`.
@@ -133,9 +143,9 @@ app/
 ├── api/v1/     versioned HTTP routes (health)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
-├── models/     SQLAlchemy models (users, organizations, memberships, enums)
-├── repositories/  data access (users, organizations, memberships)
-├── schemas/    Pydantic request/response models (users, organizations, memberships)
+├── models/     SQLAlchemy models (users, organizations, memberships, properties, enums)
+├── repositories/  data access (users, organizations, memberships, properties)
+├── schemas/    Pydantic request/response models (users, organizations, properties)
 ├── services/   business logic (future)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)

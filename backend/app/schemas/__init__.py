@@ -5,10 +5,13 @@ from app.schemas.organization_member import (
     OrganizationMemberCreate,
     OrganizationMemberRead,
 )
+from app.schemas.property import PropertyCreate, PropertyRead
 
 __all__ = [
     "OrganizationCreate",
     "OrganizationMemberCreate",
     "OrganizationMemberRead",
     "OrganizationRead",
+    "PropertyCreate",
+    "PropertyRead",
 ]

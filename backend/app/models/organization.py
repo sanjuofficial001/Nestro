@@ -12,6 +12,7 @@ from app.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
     from app.models.organization_member import OrganizationMember
+    from app.models.property import Property
 
 
 class Organization(TimestampMixin, UUIDPrimaryKeyMixin, Base):
@@ -26,6 +27,7 @@ class Organization(TimestampMixin, UUIDPrimaryKeyMixin, Base):
     members: Mapped[list[OrganizationMember]] = relationship(
         back_populates="organization"
     )
+    properties: Mapped[list[Property]] = relationship(back_populates="organization")
 
     def __repr__(self) -> str:
         return f"<Organization id={self.id!r} slug={self.slug!r}>"

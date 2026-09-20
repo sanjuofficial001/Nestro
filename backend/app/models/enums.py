@@ -28,3 +28,21 @@ class OrganizationRoleEnum(StrEnum):
     OWNER = "OWNER"
     MANAGER = "MANAGER"
     STAFF = "STAFF"
+
+
+class PropertyTypeEnum(StrEnum):
+    """Venue kinds. PostgreSQL stores these as a native ENUM (`property_type`)."""
+
+    PG = "PG"
+    HOSTEL = "HOSTEL"
+    HOTEL = "HOTEL"
+    APARTMENT = "APARTMENT"
+    COLIVING = "COLIVING"
+
+
+class PropertyStatusEnum(StrEnum):
+    """Property lifecycle. PostgreSQL stores these as a native ENUM (`property_status`)."""
+
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+    CLOSED = "CLOSED"
