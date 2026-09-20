@@ -33,7 +33,16 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
                 "select name from sqlite_master where type='table'"
             )
         }
-        assert {"users", "organizations", "organization_members", "properties"} <= tables
+        assert {
+            "users",
+            "organizations",
+            "organization_members",
+            "properties",
+            "buildings",
+            "floors",
+            "rooms",
+            "beds",
+        } <= tables
         assert "alembic_version" in tables
 
         user_columns = {
@@ -95,6 +104,76 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
             "created_at",
             "updated_at",
         } <= property_columns
+
+        building_columns = {
+            row[1]
+            for row in conn.execute("pragma table_info(buildings)")
+        }
+        assert {
+            "id",
+            "organization_id",
+            "property_id",
+            "name",
+            "description",
+            "created_at",
+            "updated_at",
+        } <= building_columns
+
+        floor_columns = {
+            row[1]
+            for row in conn.execute("pragma table_info(floors)")
+        }
+        assert {
+            "id",
+            "organization_id",
+            "building_id",
+            "floor_number",
+            "name",
+            "created_at",
+            "updated_at",
+        } <= floor_columns
+
+        room_columns = {
+            row[1]
+            for row in conn.execute("pragma table_info(rooms)")
+        }
+        assert {
+            "id",
+            "organization_id",
+            "floor_id",
+            "room_number",
+            "room_type",
+            "created_at",
+            "updated_at",
+        } <= room_columns
+        assert "capacity" not in room_columns
+        assert "max_beds" not in room_columns
+
+        bed_columns = {
+            row[1]
+            for row in conn.execute("pragma table_info(beds)")
+        }
+        assert {
+            "id",
+            "organization_id",
+            "room_id",
+            "bed_number",
+            "status",
+            "created_at",
+            "updated_at",
+        } <= bed_columns
+
+        fk_targets = {
+            table: {
+                row[2]
+                for row in conn.execute(f"pragma foreign_key_list({table})")
+            }
+            for table in ["buildings", "floors", "rooms", "beds"]
+        }
+        assert fk_targets["buildings"] == {"organizations", "properties"}
+        assert fk_targets["floors"] == {"buildings", "organizations"}
+        assert fk_targets["rooms"] == {"floors", "organizations"}
+        assert fk_targets["beds"] == {"organizations", "rooms"}
 
         version = conn.execute("select version_num from alembic_version").fetchone()
         assert version is not None and version[0]
