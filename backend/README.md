@@ -69,24 +69,44 @@ Access is layered: `api/` → `services/` → `repositories/` → `db/`. The bac
 ### Models & conventions
 
 - All models inherit from `Base` (`app/db/base.py`), which applies a fixed naming convention to generated constraints: `ix_`, `uq_`, `ck_`, `fk_`, `pk_` — so migrations are deterministic across databases.
+- `UUIDPrimaryKeyMixin` keys every table on a client-side `uuid.uuid4` UUID (`Uuid` → `UUID` on PostgreSQL).
 - `TimestampMixin` (`app/db/mixins.py`) provides timezone-aware `created_at` / `updated_at` with database-side defaults (`func.now()`); `updated_at` auto-refreshes on every UPDATE.
 - `DATABASE_URL` must point to a UTC-timed PostgreSQL for correct timestamps.
 
+### users table
+
+- Platform-wide account table (no `organization_id` — org scoping flows through `organization_members` in a later milestone).
+- Columns: `id` (UUID PK), `email` (unique, not null), `phone` (unique, nullable), `full_name`, `role`, `is_active`, `is_verified` (timestamps via the mixin).
+- No password or auth columns — credentials live in Supabase Auth, never here.
+
+### Role system
+
+- `RoleEnum` (`app/models/enums.py`): `SUPER_ADMIN`, `PG_OWNER`, `MANAGER`, `STAFF`, `TENANT`.
+- Stored as a native PostgreSQL ENUM (`user_role`), so the database enforces the allowed values; SQLite fallbacks to a VARCHAR column for tests.
+- The `role` column is indexed for platform-wide role lookups.
+- Role _grants_ and org-scoped permissions arrive with the auth milestone (`organization_members`).
+
+### Repository layer
+
+- `UserRepository` (`app/repositories/user.py`) is the typed data-access contract for users: `get_by_id`, `get_by_email`, `exists_by_email`, `create`. It takes a `Session` and stays free of business logic.
+
 ### Migrations (Alembic)
 
-Alembic reads `DATABASE_URL` from settings and targets `Base.metadata`, so `autogenerate` reflects real schema drift. Schema changes always ship with a migration.
+Alembic reads `DATABASE_URL` from settings and targets `Base.metadata` (importing `app.models`), so `autogenerate` reflects real schema drift. Schema changes always ship with a migration. The first migration (`create users table and role enum`) ships in `alembic/versions/`.
 
 ```bash
-# Generate a migration from model changes (against a reachable DATABASE_URL)
-uv run alembic revision --autogenerate -m "describe the change"
+# Apply migrations (against a reachable DATABASE_URL)
 uv run alembic upgrade head
+
+# Generate a migration from model changes
+uv run alembic revision --autogenerate -m "describe the change"
 
 # Inspect current state
 uv run alembic current
 uv run alembic history
 ```
 
-Local development without a Postgres server: no migration is generated until a real URL is configured.
+Local development without a Postgres server: point `DATABASE_URL` at a SQLite file (`sqlite+pysqlite:///./dev.db`) to apply migrations and exercise the schema locally.
 
 ## Verify
 
@@ -102,8 +122,8 @@ app/
 ├── api/v1/     versioned HTTP routes (health)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
-├── models/     SQLAlchemy models (future)
-├── repositories/  data access (future)
+├── models/     SQLAlchemy models (users, enums)
+├── repositories/  data access (users)
 ├── schemas/    Pydantic request/response models
 ├── services/   business logic (future)
 └── main.py     create_application() factory, exposes `app`

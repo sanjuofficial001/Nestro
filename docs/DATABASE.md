@@ -299,26 +299,35 @@ Supabase Auth
 
 ## Columns
 
-| Column        | Type        |
-| ------------- | ----------- |
-| id            | UUID PK     |
-| auth_user_id  | UUID        |
-| platform_role | TEXT        |
-| email         | TEXT        |
-| phone         | TEXT        |
-| full_name     | TEXT        |
-| avatar_url    | TEXT        |
-| is_active     | BOOLEAN     |
-| created_at    | TIMESTAMPTZ |
-| updated_at    | TIMESTAMPTZ |
-| deleted_at    | TIMESTAMPTZ |
+| Column      | Type        | Notes            |
+| ----------- | ----------- | ---------------- |
+| id          | UUID PK     |                  |
+| email       | TEXT        | unique, NOT NULL |
+| phone       | TEXT        | unique, nullable |
+| full_name   | TEXT        | NOT NULL         |
+| role        | user_role   | ENUM, NOT NULL   |
+| is_active   | BOOLEAN     | NOT NULL         |
+| is_verified | BOOLEAN     | NOT NULL         |
+| created_at  | TIMESTAMPTZ |                  |
+| updated_at  | TIMESTAMPTZ |                  |
 
-## platform_role
+No password or auth fields live on this table; credentials and hashes belong
+to Supabase Auth only.
+
+## role
+
+Native PostgreSQL ENUM named `user_role`:
 
 ```text
 SUPER_ADMIN
-USER
+PG_OWNER
+MANAGER
+STAFF
+TENANT
 ```
+
+Org-scoped permissions are assigned through `organization_members` (see §7),
+whose `role` column holds `OWNER`, `MANAGER`, `STAFF`, `TENANT`.
 
 ## Constraints
 
@@ -330,8 +339,7 @@ UNIQUE(phone)
 ## Indexes
 
 ```sql
-idx_users_email
-idx_users_phone
+idx_users_role
 ```
 
 ---

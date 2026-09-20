@@ -1,14 +1,15 @@
 """Alembic migration environment.
 
-Wired to the application settings (`app.core.config`) and the declarative Base
-(`app.db.base`) so future `alembic revision --autogenerate` runs reflect the ORM
-metadata. No migrations exist yet; this is scaffolding only.
+Reads `DATABASE_URL` from the application settings and targets the declarative
+Base metadata. `app.models` is imported so `alembic revision --autogenerate`
+sees every registered table (models register themselves on `Base.metadata`).
 """
 
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
 
+import app.models  # noqa: F401  (register tables on Base.metadata)
 from alembic import context
 from app.core.config import settings
 from app.db.base import Base
