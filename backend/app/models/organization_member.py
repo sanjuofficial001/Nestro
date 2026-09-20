@@ -14,6 +14,7 @@ from app.models.enums import OrganizationRoleEnum
 
 if TYPE_CHECKING:
     from app.models.organization import Organization
+    from app.models.resident_profile import ResidentProfile
     from app.models.user import User
 
 
@@ -33,6 +34,9 @@ class OrganizationMember(TimestampMixin, UUIDPrimaryKeyMixin, Base):
 
     organization: Mapped[Organization] = relationship(back_populates="members")
     user: Mapped[User] = relationship(back_populates="members")
+    resident_profile: Mapped[ResidentProfile | None] = relationship(
+        back_populates="organization_member"
+    )
 
     def __repr__(self) -> str:
         return (

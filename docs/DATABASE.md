@@ -728,44 +728,56 @@ Organization Member
 Resident Profile
 ```
 
-This avoids duplicating identity information.
+This avoids duplicating identity information: names, phone, and email live on
+`users`; the profile only adds residency data. The profile references the
+membership (`organization_member_id`), not the raw user, so a user can hold a
+resident profile in every organization they are a member of.
 
 ## Columns
 
-| Column                         | Type        |
-| ------------------------------ | ----------- |
-| id                             | UUID PK     |
-| organization_id                | UUID FK     |
-| organization_member_id         | UUID FK     |
-| property_id                    | UUID FK     |
-| emergency_contact_name         | TEXT        |
-| emergency_contact_phone        | TEXT        |
-| emergency_contact_relationship | TEXT        |
-| occupation_type                | TEXT        |
-| occupation_name                | TEXT        |
-| moved_in_at                    | TIMESTAMPTZ |
-| moved_out_at                   | TIMESTAMPTZ |
-| is_active                      | BOOLEAN     |
-| created_at                     | TIMESTAMPTZ |
-| updated_at                     | TIMESTAMPTZ |
+| Column                  | Type        |
+| ----------------------- | ----------- |
+| id                      | UUID PK     |
+| organization_id         | UUID FK     |
+| organization_member_id  | UUID FK     |
+| property_id             | UUID FK     |
+| emergency_contact_name  | TEXT        |
+| emergency_contact_phone | TEXT        |
+| address                 | TEXT        |
+| notes                   | TEXT        |
+| is_active               | BOOLEAN     |
+| created_at              | TIMESTAMPTZ |
+| updated_at              | TIMESTAMPTZ |
 
-## occupation_type
+`property_id` is nullable: a profile can exist before assignment to a property
+and before bed assignment (stays). Lifecycle details that will carry move-in /
+move-out history are deferred to §15 `tenant_stays`, which owns occupancy
+history; `occupation_type`, `occupation_name`, `emergency_contact_relationship`,
+and `moved_in_at` / `moved_out_at` columns arrive with that (stays) milestone if
+still needed.
+
+## Relationships
 
 ```text
-STUDENT
-WORKING_PROFESSIONAL
-BUSINESS
-OTHER
+Organization ──┬── Member ── User (via organization_members)
+               └── Resident Profile
+Property ── Resident Profiles
 ```
 
 ## Indexes
 
 ```sql
-idx_residents_org
-idx_residents_property
-idx_residents_member
-idx_residents_active
+ix_resident_profiles_organization_id
+ix_resident_profiles_property_id
 ```
+
+## Constraints
+
+```sql
+UNIQUE (organization_member_id)
+```
+
+One resident profile per membership.
 
 ---
 

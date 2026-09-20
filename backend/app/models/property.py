@@ -16,6 +16,7 @@ from app.models.enums import PropertyStatusEnum, PropertyTypeEnum
 if TYPE_CHECKING:
     from app.models.building import Building
     from app.models.organization import Organization
+    from app.models.resident_profile import ResidentProfile
 
 
 class Property(TimestampMixin, UUIDPrimaryKeyMixin, Base):
@@ -45,6 +46,9 @@ class Property(TimestampMixin, UUIDPrimaryKeyMixin, Base):
 
     organization: Mapped[Organization] = relationship(back_populates="properties")
     buildings: Mapped[list[Building]] = relationship(back_populates="property")
+    resident_profiles: Mapped[list[ResidentProfile]] = relationship(
+        back_populates="property"
+    )
 
     def __repr__(self) -> str:
         return f"<Property id={self.id!r} name={self.name!r} type={self.property_type.value}>"

@@ -134,6 +134,27 @@ Organization
 - **Schemas** — `{Building,Floor,Room,Bed}{Base,Create,Read}` (`app/schemas/`), strict with `extra="forbid"`; `Create` carries `organization_id` and the parent FK. `RoomRead` has no capacity field.
 - **Models** — `Building` / `Floor` / `Room` / `Bed` (`app/models/`) with fully bidirectional relationships (`property` ↔ `buildings` ↔ `floors` ↔ `rooms` ↔ `beds`).
 
+### Tenant Foundation
+
+The resident/tenant domain layer. Database + models + repositories only — no routes, services, stays, or bed assignment yet.
+
+```text
+User
+    ↓  (organization_members)
+Organization Member
+    ↓
+ResidentProfile
+    ↓  (future milestone)
+Bed Assignment / Tenant Stay
+```
+
+- **resident_profiles** — one residency profile per organization membership (`UNIQUE (organization_member_id)`). `id` (UUID PK), `organization_id` (FK, indexed tenant boundary), `organization_member_id` (FK, unique), `property_id` (FK, nullable, indexed — a profile can exist before assignment), `emergency_contact_name`, `emergency_contact_phone`, `address`, `notes` (nullable), `is_active` (default true), mixin timestamps.
+- **Identity via membership, not the raw user** — names/phone/email stay on `users`; the profile adds only residency data (DATABASE.md §14). Because uniqueness is per membership, a user can be a resident in multiple organizations through separate memberships.
+- **No lifecycle columns** — move-in/move-out and occupancy history belong to the future `tenant_stays` milestone (§15); the profile intentionally does not store moved-in/out dates. Capacity-related rules from 1.3.8 keep applying (rooms derive size from their beds).
+- **Repository** — `ResidentProfileRepository` (`app/repositories/resident_profile.py`): `get_by_id`, `get_by_user_id` (multi-org aware, joins via `organization_members`), `list_for_org`, `exists_for_user`, `create`. Every read is scoped by organization or user — no unscoped read path.
+- **Schemas** — `ResidentProfile{Base,Create,Read}` (`app/schemas/resident_profile.py`), strict with `extra="forbid"`; `ResidentProfileCreate` carries `organization_id` + `organization_member_id`.
+- **Models** — `ResidentProfile` (`app/models/resident_profile.py`) with bidirectional `organization` ↔ `resident_profiles`, `organization_member` ↔ `resident_profile`, `property` ↔ `resident_profiles`.
+
 ### Migrations (Alembic)
 
 Alembic reads `DATABASE_URL` from settings and targets `Base.metadata` (importing `app.models`), so `autogenerate` reflects real schema drift. Schema changes always ship with a migration. The first migration (`create users table and role enum`) ships in `alembic/versions/`.
@@ -166,9 +187,9 @@ app/
 ├── api/v1/     versioned HTTP routes (health)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
-├── models/     SQLAlchemy models (users, organizations, memberships, properties, buildings, floors, rooms, beds, enums)
-├── repositories/  data access (users, organizations, memberships, properties, buildings, floors, rooms, beds)
-├── schemas/    Pydantic request/response models (users, organizations, properties, buildings, floors, rooms, beds)
+├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, enums)
+├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles)
+├── schemas/    Pydantic request/response models (users, orgs, properties, buildings, floors, rooms, beds, resident profiles)
 ├── services/   business logic (future)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)
