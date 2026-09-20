@@ -3,6 +3,10 @@ name = "nestro-backend"
 version = "0.1.0"
 description = "FastAPI backend for Nestro — PG management and resident experience platform."
 requires-python = ">=3.12"
+dependencies = [
+    "cryptography>=50.0.1",
+    "pyjwt>=2.14.0",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

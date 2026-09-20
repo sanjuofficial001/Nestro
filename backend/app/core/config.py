@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     debug: bool = False
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/nestro"
     jwt_secret: str = "change-me"
+    jwt_verification_key: str = ""
+    jwt_issuer: str = "supabase"
+    jwt_audience: str = "authenticated"
 
 
 @lru_cache
