@@ -33,7 +33,7 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
                 "select name from sqlite_master where type='table'"
             )
         }
-        assert {"users", "organizations", "organization_members"} <= tables
+        assert {"users", "organizations", "organization_members", "properties"} <= tables
         assert "alembic_version" in tables
 
         user_columns = {
@@ -77,6 +77,24 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
             "created_at",
             "updated_at",
         } <= member_columns
+
+        property_columns = {
+            row[1]
+            for row in conn.execute("pragma table_info(properties)")
+        }
+        assert {
+            "id",
+            "organization_id",
+            "name",
+            "property_type",
+            "address",
+            "contact_phone",
+            "rules",
+            "status",
+            "deleted_at",
+            "created_at",
+            "updated_at",
+        } <= property_columns
 
         version = conn.execute("select version_num from alembic_version").fetchone()
         assert version is not None and version[0]
