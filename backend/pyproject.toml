@@ -5,6 +5,7 @@ description = "FastAPI backend for Nestro — PG management and resident experie
 requires-python = ">=3.12"
 dependencies = [
     "cryptography>=50.0.1",
+    "pwdlib[argon2]>=0.3.1",
     "pyjwt>=2.14.0",
 ]
 

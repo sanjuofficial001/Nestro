@@ -88,7 +88,28 @@ Access is layered: `api/` → `services/` → `repositories/` → `db/`. The bac
 
 ### Repository layer
 
-- `UserRepository` (`app/repositories/user.py`) is the typed data-access contract for users: `get_by_id`, `get_by_email`, `exists_by_email`, `create`. It takes a `Session` and stays free of business logic.
+- `UserRepository` (`app/repositories/user.py`) is the typed data-access contract for users: `get_by_id`, `get_by_email` (case-insensitive), `exists_by_email`, `create`, `create_user`. It takes a `Session` and stays free of business logic.
+
+### Authentication Foundation
+
+The Register API — the first auth milestone. Self-service tenant registration only; no login, tokens, OTP, verification, reset, or permissions (those arrive with the dedicated Auth/Login milestone).
+
+- **Register endpoint** — `POST /api/v1/auth/register` (`app/api/v1/routes/auth.py`), mounted under `/auth` in `app/api/v1/router.py`, visible in Swagger and OpenAPI.
+- **Request** (`RegisterRequest`): `email` (EmailStr, normalized to lowercase), `phone`, `full_name` (stripped), `password` (min 8 chars). Strict: unknown fields rejected (`extra="forbid"`).
+- **Response** (`RegisterResponse`, 201): `id` (UUID), `email`, `phone`, `full_name`, `created_at` — never the password.
+- **Service** — `AuthService` (`app/services/auth_service.py`) is the first service layer: duplicate-email check → transient password hash → create user with `RoleEnum.TENANT`.
+- **Password hashing is transient** (`app/core/security.py`, Argon2id via `pwdlib`): hashes are computed for validation and then discarded. **No hash is ever persisted** — the `users` table holds no password/auth columns, and credentials remain Supabase Auth's job (see `users table`).
+
+| Method | Path                    | Success | Errors                                                   |
+| ------ | ----------------------- | ------- | -------------------------------------------------------- |
+| POST   | `/api/v1/auth/register` | 201     | 409 `{"detail":"email already exists"}` · 422 validation |
+
+```json
+// Request
+{ "email": "user@example.com", "phone": "9876543210", "full_name": "John Doe", "password": "StrongPass123" }
+// Response 201
+{ "id": "…", "email": "user@example.com", "phone": "9876543210", "full_name": "John Doe", "created_at": "…" }
+```
 
 ### Organization Foundation
 
@@ -208,13 +229,13 @@ uv run pytest
 
 ```
 app/
-├── api/v1/     versioned HTTP routes (health)
-├── core/       config (pydantic-settings), logging, lifespan, exceptions
+├── api/v1/     versioned HTTP routes (health, auth/register)
+├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (password hashing)
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
 ├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, enums)
 ├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
-├── schemas/    Pydantic request/response models (users, orgs, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
-├── services/   business logic (future)
+├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
+├── services/   business logic (auth service — registration)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)
 tests/          pytest suite

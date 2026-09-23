@@ -1,11 +1,13 @@
 """Security primitives — isolated utilities with no business logic and no DB.
 
-Bearer-token extraction, the JWT algorithm allow-list, and the role-matching
-helpers used by the authorization layer. Nothing here reads settings, talks to
-a database, or raises FastAPI-specific exceptions.
+Bearer-token extraction, the JWT algorithm allow-list, the role-matching
+helpers used by the authorization layer, and password hashing. Nothing here
+reads settings, talks to a database, or raises FastAPI-specific exceptions.
 """
 
 from collections.abc import Collection
+
+from pwdlib import PasswordHash
 
 from app.models.enums import RoleEnum
 
@@ -43,3 +45,16 @@ def role_satisfies(user_role: RoleEnum, allowed: Collection[RoleEnum]) -> bool:
     elevated. `allowed` may be empty — only the platform-wide role passes then.
     """
     return user_role is PLATFORM_WIDE_ROLE or user_role in allowed
+
+
+# Argon2id via pwdlib's recommended configuration. Hashes are never persisted:
+# registration uses them as a transient validation step only.
+_PASSWORD_HASHER = PasswordHash.recommended()
+
+
+def hash_password(password: str) -> str:
+    return _PASSWORD_HASHER.hash(password)
+
+
+def verify_password(password: str, hashed_password: str) -> bool:
+    return _PASSWORD_HASHER.verify(password, hashed_password)

@@ -2,7 +2,8 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -17,16 +18,31 @@ class UserRepository:
         return self._session.get(User, user_id)
 
     def get_by_email(self, email: str) -> User | None:
-        return self._session.scalar(select(User).where(User.email == email))
+        normalized = email.strip().lower()
+        return self._session.scalar(
+            select(User).where(func.lower(User.email) == normalized)
+        )
 
     def exists_by_email(self, email: str) -> bool:
+        normalized = email.strip().lower()
         return self._session.scalar(
-            select(User.id).where(User.email == email).limit(1)
+            select(User.id).where(func.lower(User.email) == normalized).limit(1)
         ) is not None
 
     def create(self, data: UserCreate) -> User:
         user = User(**data.model_dump())
         self._session.add(user)
         self._session.commit()
+        self._session.refresh(user)
+        return user
+
+    def create_user(self, data: UserCreate) -> User:
+        user = User(**data.model_dump())
+        self._session.add(user)
+        try:
+            self._session.commit()
+        except IntegrityError:
+            self._session.rollback()
+            raise
         self._session.refresh(user)
         return user
