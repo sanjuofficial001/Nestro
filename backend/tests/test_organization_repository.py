@@ -33,6 +33,15 @@ def test_exists_by_slug(db_session) -> None:
     assert repo.exists_by_slug("abc-mall") is True
 
 
+def test_exists_by_name_is_case_insensitive(db_session) -> None:
+    repo = OrganizationRepository(db_session)
+    assert repo.exists_by_name("ABC MALL") is False
+    create_org(repo)
+    assert repo.exists_by_name("abc mall") is True
+    assert repo.exists_by_name("ABC Mall") is True
+    assert repo.exists_by_name("Other Mall") is False
+
+
 def test_get_by_slug(db_session) -> None:
     repo = OrganizationRepository(db_session)
     org = create_org(repo, slug="sunrise-apartments")
@@ -107,3 +116,27 @@ def test_exists_membership(db_session) -> None:
         )
     )
     assert member_repo.exists_membership(org.id, user_id) is True
+
+
+def test_get_for_user(db_session) -> None:
+    org = create_org(OrganizationRepository(db_session))
+    other_org = create_org(OrganizationRepository(db_session), slug="other-mall")
+    user_id = uuid4()
+    member_repo = OrganizationMemberRepository(db_session)
+    assert member_repo.get_for_user(user_id) == []
+    first = member_repo.create(
+        OrganizationMemberCreate(
+            organization_id=org.id,
+            user_id=user_id,
+            role=OrganizationRoleEnum.OWNER,
+        )
+    )
+    second = member_repo.create(
+        OrganizationMemberCreate(
+            organization_id=other_org.id,
+            user_id=user_id,
+            role=OrganizationRoleEnum.STAFF,
+        )
+    )
+    memberships = member_repo.get_for_user(user_id)
+    assert {m.id for m in memberships} == {first.id, second.id}
