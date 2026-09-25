@@ -30,6 +30,13 @@ class OrganizationMemberRepository:
             select(OrganizationMember).where(OrganizationMember.user_id == user_id)
         )
 
+    def get_for_user(self, user_id: UUID) -> list[OrganizationMember]:
+        return list(
+            self._session.scalars(
+                select(OrganizationMember).where(OrganizationMember.user_id == user_id)
+            )
+        )
+
     def exists_membership(self, organization_id: UUID, user_id: UUID) -> bool:
         return self._session.scalar(
             select(OrganizationMember.id)

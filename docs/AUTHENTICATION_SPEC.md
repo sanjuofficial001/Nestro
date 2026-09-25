@@ -116,6 +116,33 @@ sequenceDiagram
     B-->>C: Profile created
 ```
 
+## Onboarding Flow
+
+Bootstraps a user's first organization and OWNER membership. Runs once per user; existing organizations are never joined and no property is created here.
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant C as Client
+    participant B as FastAPI Backend
+    participant DB as PostgreSQL
+
+    U->>C: Sign in (Supabase Auth)
+    C->>B: POST /auth/onboard (organization_name, organization_slug) + Bearer token
+    B->>B: Verify JWT → resolve Nestro user (inactive users rejected 401)
+    B->>DB: Check slug not taken, user has no memberships
+    alt slug exists or user onboarded
+        B-->>C: 409 conflict
+    else
+        B->>DB: INSERT organization + organization_members (OWNER) in one transaction
+        B-->>C: 201 { organization_id, organization_name, organization_slug, membership_id, role: "OWNER" }
+    end
+```
+
+- **One-time bootstrap** — a user with any existing membership is rejected (`409 user already onboarded`); duplicate slug rejects before any write (`409 organization slug already exists`).
+- **Single transaction** — the organization and its OWNER membership are committed together; any failure rolls back (no partial organization).
+- **Out of scope** — invitations, joining existing organizations, organization switching, property creation, billing, and role management all arrive in later milestones.
+
 ## OTP Login Flow
 
 ```mermaid

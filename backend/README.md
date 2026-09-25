@@ -116,6 +116,7 @@ Self-service tenant registration (Phase 1.4.1). Creates a Nestro user profile wi
 | ------ | ----------------------- | ------- | -------------------------------------------------------- |
 | POST   | `/api/v1/auth/register` | 201     | 409 `{"detail":"email already exists"}` · 422 validation |
 | GET    | `/api/v1/auth/me`       | 200     | 401 authentication                                       |
+| POST   | `/api/v1/auth/onboard`  | 201     | 409 slug/membership conflict · 422 validation            |
 
 ```json
 // Request
@@ -138,6 +139,29 @@ GET /api/v1/auth/me
 Authorization: Bearer <access token>
 // Response 200
 { "id": "…", "email": "user@example.com", "phone": "9876543210", "full_name": "John Doe", "role": "TENANT", "is_active": true, "created_at": "…", "updated_at": "…" }
+```
+
+### Onboarding Bootstrap
+
+Bootstraps the user's first business: an organization plus an OWNER membership. One-time flow per user.
+
+#### POST /api/v1/auth/onboard
+
+Creates the user's first organization and owner membership (`app/services/onboarding_service.py`) — the bridge from an authenticated user to an operator. Requires authentication; runs only once per user.
+
+- **Request** (`OnboardingRequest`): `organization_name` (1–255, stripped), `organization_slug` (3–100, lowercase, no spaces). Strict: unknown fields rejected (`extra="forbid"`).
+- **Response** (`OnboardingResponse`, 201): `organization_id`, `organization_name`, `organization_slug`, `membership_id`, `role` (`OWNER`).
+- **Errors** — 409 `{"detail":"organization slug already exists"}`; 409 `{"detail":"user already onboarded"}`; 422 validation; 401 unauthenticated.
+- **Transaction** — the organization and membership are created in a single transaction; any failure rolls back, so a partial organization never persists.
+- **Notes** — one-time bootstrap; creates the organization; creates the owner membership; does **not** create properties; does **not** join existing organizations; no invitations, switching, or multi-org support yet.
+
+```json
+// Request
+POST /api/v1/auth/onboard
+Authorization: Bearer <access token>
+{ "organization_name": "My PG", "organization_slug": "my-pg" }
+// Response 201
+{ "organization_id": "…", "organization_name": "My PG", "organization_slug": "my-pg", "membership_id": "…", "role": "OWNER" }
 ```
 
 ### Organization Foundation
@@ -258,13 +282,13 @@ uv run pytest
 
 ```
 app/
-├── api/v1/     versioned HTTP routes (health, auth/register, auth/me)
+├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (JWT verification + JWKS, password hashing)
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
 ├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, enums)
 ├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
 ├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
-├── services/   business logic (auth service — registration)
+├── services/   business logic (auth service — registration; onboarding service)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)
 tests/          pytest suite

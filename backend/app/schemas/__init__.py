@@ -5,6 +5,7 @@ from app.schemas.auth_me import AuthMeResponse
 from app.schemas.bed import BedCreate, BedRead
 from app.schemas.building import BuildingCreate, BuildingRead
 from app.schemas.floor import FloorCreate, FloorRead
+from app.schemas.onboarding import OnboardingRequest, OnboardingResponse
 from app.schemas.organization import OrganizationCreate, OrganizationRead
 from app.schemas.organization_member import (
     OrganizationMemberCreate,
@@ -27,6 +28,8 @@ __all__ = [
     "OrganizationMemberCreate",
     "OrganizationMemberRead",
     "OrganizationRead",
+    "OnboardingRequest",
+    "OnboardingResponse",
     "PropertyCreate",
     "PropertyRead",
     "RegisterRequest",

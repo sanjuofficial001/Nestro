@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.organization import Organization
@@ -24,6 +24,14 @@ class OrganizationRepository:
     def exists_by_slug(self, slug: str) -> bool:
         return self._session.scalar(
             select(Organization.id).where(Organization.slug == slug).limit(1)
+        ) is not None
+
+    def exists_by_name(self, name: str) -> bool:
+        normalized = name.strip().lower()
+        return self._session.scalar(
+            select(Organization.id)
+            .where(func.lower(Organization.name) == normalized)
+            .limit(1)
         ) is not None
 
     def create(self, data: OrganizationCreate) -> Organization:
