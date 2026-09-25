@@ -18,6 +18,8 @@ Fully offline and deterministic:
                   dependency_overrides[get_db]. Guards return the caller so
                   tests can assert identity and role resolution (and rejections)
                   through the exact FastAPI dependency path real routers use.
+- api_app       - like auth_app but mounts the real v1 router (register / auth
+                  me / health), exercising the actual HTTP endpoints end to end.
 """
 
 from collections.abc import Callable, Iterator
@@ -37,6 +39,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.api.deps import get_current_user, require_any_role, require_role
+from app.api.v1.router import api_router
 from app.core.auth import get_verifier
 from app.core.config import get_settings
 from app.core.handlers import register_exception_handlers
@@ -205,10 +208,16 @@ class AuthHarness:
         role: RoleEnum,
         is_active: bool = True,
         is_verified: bool = True,
+        phone: str | None = None,
     ) -> User:
         with self.factory() as session:
             user = UserRepository(session).create(
-                UserCreate(email=email, phone=None, full_name="Test User", role=role),
+                UserCreate(
+                    email=email,
+                    phone=phone,
+                    full_name="Test User",
+                    role=role,
+                ),
             )
             user.is_active = is_active
             user.is_verified = is_verified
@@ -250,6 +259,26 @@ def auth_app(
         ],
     ) -> dict[str, str]:
         return {"email": user.email, "role": user.role.value}
+
+    with TestClient(app) as client:
+        yield AuthHarness(client=client, factory=db_session_factory)
+
+
+@pytest.fixture
+def api_app(
+    db_session_factory: sessionmaker[Session],
+    auth_env: None,
+) -> Iterator[AuthHarness]:
+    """A throwaway app mounting the real v1 router, backed by the in-memory DB."""
+
+    def override_get_db() -> Iterator[Session]:
+        with db_session_factory() as session:
+            yield session
+
+    app = FastAPI()
+    app.dependency_overrides[get_db] = override_get_db
+    register_exception_handlers(app)
+    app.include_router(api_router, prefix=get_settings().api_v1_prefix)
 
     with TestClient(app) as client:
         yield AuthHarness(client=client, factory=db_session_factory)
