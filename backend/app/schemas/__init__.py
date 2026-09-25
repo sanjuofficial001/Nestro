@@ -12,6 +12,7 @@ from app.schemas.organization_member import (
     OrganizationMemberRead,
 )
 from app.schemas.property import PropertyCreate, PropertyRead
+from app.schemas.property_api import PropertyUpdate
 from app.schemas.resident_profile import ResidentProfileCreate, ResidentProfileRead
 from app.schemas.room import RoomCreate, RoomRead
 from app.schemas.tenant_stay import TenantStayCreate, TenantStayRead
@@ -32,6 +33,7 @@ __all__ = [
     "OnboardingResponse",
     "PropertyCreate",
     "PropertyRead",
+    "PropertyUpdate",
     "RegisterRequest",
     "RegisterResponse",
     "ResidentProfileCreate",

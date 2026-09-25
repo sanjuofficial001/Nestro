@@ -185,6 +185,51 @@ The first organization-scoped business entity, built on the Organization Foundat
 - **Schemas** — `Property{Base,Create,Read}` (`app/schemas/property.py`), strict with `extra="forbid"`; `PropertyCreate` carries `organization_id`.
 - **Model** — `Property` (`app/models/property.py`) with bidirectional `properties` ↔ `organization` relationship.
 
+### Property API
+
+Org-scoped CRUD for the first business entity. Authorization always derives from `OrganizationMember.role` — **not** `users.role` — except for the platform-wide SUPER_ADMIN bypass. The caller's organization is never read from a request body field beyond `organization_id`; single-property routes derive it from the row itself.
+
+| Role        | Read | Write |
+| ----------- | ---- | ----- |
+| OWNER       | Yes  | Yes   |
+| MANAGER     | Yes  | Yes   |
+| STAFF       | Yes  | No    |
+| SUPER_ADMIN | Yes  | Yes   |
+
+- **Endpoints** — `POST /api/v1/properties` (201), `GET /api/v1/properties?organization_id=<uuid>`, `GET /api/v1/properties/{id}`, `PATCH /api/v1/properties/{id}` (`app/api/v1/routes/properties.py`).
+- **Guard** — `require_org_roles(...)` (`app/api/permissions.py`): pure org-scoped helper reading `OrganizationMember.role`; the platform SUPER_ADMIN role passes any guard. No FastAPI dependencies.
+- **Service** — `PropertyService` (`app/services/property_service.py`) composes membership resolution (`OrganizationMemberRepository`) with property data access (`PropertyRepository`).
+- **Create** (`PropertyCreate`) — requires OWNER/MANAGER membership in the target organization; duplicate `name` within the organization → 409.
+- **Update** (`PropertyUpdate`) — only `name`, `address`, `contact_phone`, `rules`, `status` are editable; `organization_id` and `property_type` are structurally immutable (not even accepted in the request body). Omitted fields are left unchanged.
+- **Read** — any member may list/get; missing property → 404.
+- **Errors** — 401 unauthenticated · 403 `insufficient permissions` · 404 `property not found` · 409 `property already exists` · 422 validation.
+- **Notes** — soft delete and `DELETE` are **not** implemented. No pagination or filtering yet. Building/floor/room/bed, resident, and tenant-stay APIs remain future milestones.
+
+| Method | Path                      | Success | Errors                                                                 |
+| ------ | ------------------------- | ------- | ---------------------------------------------------------------------- |
+| POST   | `/api/v1/properties`      | 201     | 403 insufficient permissions · 409 duplicate · 422 validation          |
+| GET    | `/api/v1/properties`      | 200     | 403 insufficient permissions · 422 missing organization_id             |
+| GET    | `/api/v1/properties/{id}` | 200     | 403 insufficient permissions · 404 property not found                  |
+| PATCH  | `/api/v1/properties/{id}` | 200     | 403 insufficient permissions · 404 property not found · 422 validation |
+
+```json
+// Create
+POST /api/v1/properties
+Authorization: Bearer <access token>
+{ "organization_id": "…", "name": "PSG Boys PG", "property_type": "PG", "address": "Gandhi St, Chennai" }
+// Response 201
+{ "id": "…", "organization_id": "…", "name": "PSG Boys PG", "property_type": "PG", "address": "Gandhi St, Chennai", "contact_phone": null, "rules": null, "status": "ACTIVE", "created_at": "…", "updated_at": "…", "deleted_at": null }
+```
+
+```json
+// Update (only provided fields change; organization_id / property_type immutable)
+PATCH /api/v1/properties/{id}
+Authorization: Bearer <access token>
+{ "name": "PSG Boys North", "status": "INACTIVE" }
+// Response 200
+{ "id": "…", "organization_id": "…", "name": "PSG Boys North", "property_type": "PG", "status": "INACTIVE", "…": "…" }
+```
+
 ### Physical Structure Foundation
 
 The inventory hierarchy under a property. Database + models + repositories only — no routes, services, occupancy, or assignment yet.
@@ -282,13 +327,13 @@ uv run pytest
 
 ```
 app/
-├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard)
+├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (JWT verification + JWKS, password hashing)
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
 ├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, enums)
 ├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
 ├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
-├── services/   business logic (auth service — registration; onboarding service)
+├── services/   business logic (auth service — registration; onboarding service; property service)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)
 tests/          pytest suite

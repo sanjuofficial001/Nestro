@@ -1,0 +1,34 @@
+"""Pydantic models for the property API.
+
+`PropertyUpdate` is deliberately split from the foundation schemas: only the
+editable subset of fields exists here. `organization_id` and `property_type`
+are immutable — they cannot be sent, so they can never change.
+"""
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.models.enums import PropertyStatusEnum
+
+
+def _strip_optional(value: str | None) -> str | None:
+    return value.strip() if value else value
+
+
+class PropertyUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    address: str | None = Field(default=None, max_length=1000)
+    contact_phone: str | None = Field(default=None, max_length=20)
+    rules: str | None = Field(default=None, max_length=4000)
+    status: PropertyStatusEnum | None = None
+
+    @field_validator("name")
+    @classmethod
+    def strip_name(cls, value: str | None) -> str | None:
+        return _strip_optional(value)
+
+    @field_validator("address", "rules")
+    @classmethod
+    def strip_long_text(cls, value: str | None) -> str | None:
+        return _strip_optional(value)

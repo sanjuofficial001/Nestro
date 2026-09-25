@@ -24,3 +24,10 @@ class AuthorizationError(AppException):
 
     def __init__(self, *, status_code: int = 403, detail: str = "Forbidden") -> None:
         super().__init__(status_code=status_code, detail=detail)
+
+
+class NotFoundError(AppException):
+    """A requested resource does not exist."""
+
+    def __init__(self, *, status_code: int = 404, detail: str = "property not found") -> None:
+        super().__init__(status_code=status_code, detail=detail)
