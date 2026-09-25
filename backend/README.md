@@ -275,6 +275,51 @@ Authorization: Bearer <access token>
 { "id": "…", "organization_id": "…", "property_id": "…", "name": "Block A North", "description": "Renamed wing", "…": "…" }
 ```
 
+### Floor API
+
+Org-scoped CRUD for the second level of the physical hierarchy — floors within a building. Authorization mirrors the Property/Building APIs: it derives from `OrganizationMember.role` (**not** `users.role`), except the platform-wide SUPER_ADMIN bypass. A floor's organization/building is never taken from a body field beyond `organization_id`/`building_id`; single-floor routes derive them from the row itself, and list/create verify the referenced building belongs to the caller's organization.
+
+| Role        | Read | Write |
+| ----------- | ---- | ----- |
+| OWNER       | Yes  | Yes   |
+| MANAGER     | Yes  | Yes   |
+| STAFF       | Yes  | No    |
+| SUPER_ADMIN | Yes  | Yes   |
+
+- **Endpoints** — `POST /api/v1/floors` (201), `GET /api/v1/floors?organization_id=<uuid>&building_id=<uuid>`, `GET /api/v1/floors/{id}`, `PATCH /api/v1/floors/{id}` (`app/api/v1/routes/floors.py`).
+- **Guard** — `require_org_roles(...)` (`app/api/permissions.py`), the org-scoped helper shared with the Property/Building APIs.
+- **Service** — `FloorService` (`app/services/floor_service.py`) composes membership resolution, building existence/ownership checks (`BuildingRepository`), and floor data access (`FloorRepository`).
+- **Create** (`FloorCreate`) — requires OWNER/MANAGER membership; the referenced building must exist and belong to the same organization; duplicate `floor_number` within a building → 409 (`UNIQUE (building_id, floor_number)`).
+- **Update** (`FloorUpdate`) — only `floor_number` and `name` are editable; `organization_id` and `building_id` are structurally immutable (not even accepted in the request body). Changing `floor_number` to a value already used in the building → 409. Omitted fields are left unchanged.
+- **Read** — any member may list/get; missing floor → 404.
+- **Errors** — 401 unauthenticated · 403 `insufficient permissions` · 404 `floor not found` / `building not found` · 409 `floor already exists` / building-organization conflict · 422 validation.
+- **Notes** — no soft delete and no `DELETE`. Room/bed, resident, and tenant-stay APIs remain future milestones.
+
+| Method | Path                  | Success | Errors                                                                                           |
+| ------ | --------------------- | ------- | ------------------------------------------------------------------------------------------------ |
+| POST   | `/api/v1/floors`      | 201     | 403 insufficient permissions · 404 building not found · 409 duplicate/belongs-to-other-org · 422 |
+| GET    | `/api/v1/floors`      | 200     | 403 insufficient permissions · 404 building not found · 422 missing query params                 |
+| GET    | `/api/v1/floors/{id}` | 200     | 403 insufficient permissions · 404 floor not found                                               |
+| PATCH  | `/api/v1/floors/{id}` | 200     | 403 insufficient permissions · 404 floor not found · 409 duplicate floor number · 422 validation |
+
+```json
+// Create
+POST /api/v1/floors
+Authorization: Bearer <access token>
+{ "organization_id": "…", "building_id": "…", "floor_number": 1, "name": "First" }
+// Response 201
+{ "id": "…", "organization_id": "…", "building_id": "…", "floor_number": 1, "name": "First", "created_at": "…", "updated_at": "…" }
+```
+
+```json
+// Update (only provided fields change; organization_id / building_id immutable)
+PATCH /api/v1/floors/{id}
+Authorization: Bearer <access token>
+{ "floor_number": 2, "name": "Second" }
+// Response 200
+{ "id": "…", "organization_id": "…", "building_id": "…", "floor_number": 2, "name": "Second", "…": "…" }
+```
+
 ### Physical Structure Foundation
 
 The inventory hierarchy under a property. Database + models + repositories only — no routes, services, occupancy, or assignment yet.
@@ -372,13 +417,13 @@ uv run pytest
 
 ```
 app/
-├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties, buildings)
+├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties, buildings, floors)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (JWT verification + JWKS, password hashing)
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
 ├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, enums)
 ├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
-├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, building_api, floors, rooms, beds, resident profiles, tenant stays)
-├── services/   business logic (auth service — registration; onboarding service; property service; building service)
+├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, building_api, floors, floor_api, rooms, beds, resident profiles, tenant stays)
+├── services/   business logic (auth service — registration; onboarding service; property service; building service; floor service)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)
 tests/          pytest suite

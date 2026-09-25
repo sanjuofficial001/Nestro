@@ -28,6 +28,16 @@ class FloorRepository:
             )
         )
 
+    def exists_by_number(self, building_id: UUID, floor_number: int) -> bool:
+        return self._session.scalar(
+            select(Floor.id)
+            .where(
+                Floor.building_id == building_id,
+                Floor.floor_number == floor_number,
+            )
+            .limit(1)
+        ) is not None
+
     def create(self, data: FloorCreate) -> Floor:
         floor = Floor(**data.model_dump())
         self._session.add(floor)

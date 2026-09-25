@@ -6,6 +6,7 @@ from app.schemas.bed import BedCreate, BedRead
 from app.schemas.building import BuildingCreate, BuildingRead
 from app.schemas.building_api import BuildingUpdate
 from app.schemas.floor import FloorCreate, FloorRead
+from app.schemas.floor_api import FloorUpdate
 from app.schemas.onboarding import OnboardingRequest, OnboardingResponse
 from app.schemas.organization import OrganizationCreate, OrganizationRead
 from app.schemas.organization_member import (
@@ -27,6 +28,7 @@ __all__ = [
     "BuildingUpdate",
     "FloorCreate",
     "FloorRead",
+    "FloorUpdate",
     "OrganizationCreate",
     "OrganizationMemberCreate",
     "OrganizationMemberRead",
