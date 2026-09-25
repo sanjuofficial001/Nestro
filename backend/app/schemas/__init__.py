@@ -1,6 +1,7 @@
 """Pydantic request/response models. Every API payload is validated by these."""
 
 from app.schemas.auth import RegisterRequest, RegisterResponse
+from app.schemas.auth_me import AuthMeResponse
 from app.schemas.bed import BedCreate, BedRead
 from app.schemas.building import BuildingCreate, BuildingRead
 from app.schemas.floor import FloorCreate, FloorRead
@@ -15,6 +16,7 @@ from app.schemas.room import RoomCreate, RoomRead
 from app.schemas.tenant_stay import TenantStayCreate, TenantStayRead
 
 __all__ = [
+    "AuthMeResponse",
     "BedCreate",
     "BedRead",
     "BuildingCreate",

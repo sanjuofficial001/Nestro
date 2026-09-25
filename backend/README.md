@@ -115,12 +115,29 @@ Self-service tenant registration (Phase 1.4.1). Creates a Nestro user profile wi
 | Method | Path                    | Success | Errors                                                   |
 | ------ | ----------------------- | ------- | -------------------------------------------------------- |
 | POST   | `/api/v1/auth/register` | 201     | 409 `{"detail":"email already exists"}` · 422 validation |
+| GET    | `/api/v1/auth/me`       | 200     | 401 authentication                                       |
 
 ```json
 // Request
 { "email": "user@example.com", "phone": "9876543210", "full_name": "John Doe", "password": "StrongPass123" }
 // Response 201
 { "id": "…", "email": "user@example.com", "phone": "9876543210", "full_name": "John Doe", "created_at": "…" }
+```
+
+#### GET /api/v1/auth/me
+
+Returns the authenticated Nestro user profile (`app/api/v1/routes/auth.py`).
+
+- **Authentication** — `Authorization: Bearer <access token>`; no role restriction, any authenticated user may read their own profile.
+- **Authority** — the JWT proves identity; the Nestro database provides the role, the active status, and every other field in the response. JWT role claims are never trusted.
+- **Response** (`AuthMeResponse`, 200): `id`, `email`, `phone`, `full_name`, `role`, `is_active`, `created_at`, `updated_at` — database fields only, never token/internal fields.
+
+```json
+// Request
+GET /api/v1/auth/me
+Authorization: Bearer <access token>
+// Response 200
+{ "id": "…", "email": "user@example.com", "phone": "9876543210", "full_name": "John Doe", "role": "TENANT", "is_active": true, "created_at": "…", "updated_at": "…" }
 ```
 
 ### Organization Foundation
@@ -241,7 +258,7 @@ uv run pytest
 
 ```
 app/
-├── api/v1/     versioned HTTP routes (health, auth/register)
+├── api/v1/     versioned HTTP routes (health, auth/register, auth/me)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (JWT verification + JWKS, password hashing)
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
 ├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, enums)
