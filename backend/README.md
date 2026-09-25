@@ -24,16 +24,18 @@ cp .env.example .env
 
 ### Environment variables
 
-| Variable        | Default                                                        | Notes                                                                           |
-| --------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `PROJECT_NAME`  | `Nestro`                                                       |                                                                                 |
-| `API_V1_PREFIX` | `/api/v1`                                                      | Base path for versioned routes                                                  |
-| `ENVIRONMENT`   | `development`                                                  | Must be `development`, `staging`, or `production` — anything else fails at boot |
-| `DEBUG`         | `False`                                                        | Enables DEBUG-level logging                                                     |
-| `DATABASE_URL`  | `postgresql+psycopg://postgres:postgres@localhost:5432/nestro` | Placeholder; set a real URL to connect to a database                            |
-| `JWT_SECRET`    | `change-me`                                                    | Placeholder; replace before any auth work                                       |
-
-All six are optional to boot (dev defaults) but must be set per environment in production. Values load from `.env` via `Settings` (`pydantic-settings`), accessed through the cached `get_settings()`.
+| Variable               | Default                                                        | Notes                                                                               |
+| ---------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `PROJECT_NAME`         | `Nestro`                                                       |                                                                                     |
+| `API_V1_PREFIX`        | `/api/v1`                                                      | Base path for versioned routes                                                      |
+| `ENVIRONMENT`          | `development`                                                  | Must be `development`, `staging`, or `production` — anything else fails at boot     |
+| `DEBUG`                | `False`                                                        | Enables DEBUG-level logging                                                         |
+| `DATABASE_URL`         | `postgresql+psycopg://postgres:postgres@localhost:5432/nestro` | Placeholder; set a real URL to connect to a database                                |
+| `SUPABASE_URL`         | _(empty)_                                                      | Supabase project URL; enables JWKS-based access-token verification                  |
+| `JWT_SECRET`           | `change-me`                                                    | Placeholder; only relevant to legacy symmetric Supabase projects (not enforced)     |
+| `JWT_VERIFICATION_KEY` | _(empty)_                                                      | Static RSA PEM for offline dev/tests; ignored when `SUPABASE_URL` is set            |
+| `JWT_ISSUER`           | `supabase`                                                     | Access-token issuer; defaults to `<SUPABASE_URL>/auth/v1` when unset and URL is set |
+| `JWT_AUDIENCE`         | `authenticated`                                                | Required token `aud` claim                                                          |
 
 The application must reach its database at startup.
 
@@ -92,13 +94,23 @@ Access is layered: `api/` → `services/` → `repositories/` → `db/`. The bac
 
 ### Authentication Foundation
 
-The Register API — the first auth milestone. Self-service tenant registration only; no login, tokens, OTP, verification, reset, or permissions (those arrive with the dedicated Auth/Login milestone).
+**Supabase Auth owns authentication; Nestro owns application identity and authorization.** Nestro stores no passwords, no hashes, and no tokens — the `users` table has no credential columns. Access tokens are verified on every request.
 
-- **Register endpoint** — `POST /api/v1/auth/register` (`app/api/v1/routes/auth.py`), mounted under `/auth` in `app/api/v1/router.py`, visible in Swagger and OpenAPI.
+- **Authentication authority — Supabase Auth.** Clients sign in with Supabase; Supabase issues short-lived access JWTs (RS256).
+- **Verification** (`app/core/auth.py`) — cookies free, stateless, every request. The JWT signature is verified against the Supabase project's JWKS endpoint (`<SUPABASE_URL>/auth/v1/.well-known/jwks.json`, fetched and cached via PyJWT's `PyJWKClient` when `SUPABASE_URL` is set; a static `JWT_VERIFICATION_KEY` PEM covers offline dev/tests). `exp`, `aud`, `iss`, and the algorithm allow-list (RS256 only) are enforced; every failure is a uniform `401`.
+- **Identity — Nestro User by email.** The verified token `email` claim is looked up case-insensitively in `users` (`get_by_email`). Unknown or `is_active = false` users are rejected with the same uniform `401`. The token `sub` is a Supabase auth UUID and is never used to look up Nestro users.
+- **Authorization — Nestro database only.** `get_current_user` / `require_role(...)` / `require_any_role(...)` (`app/api/deps.py`) hand routes the Nestro `User`; role and active status always come from the DB row, never from JWT claims.
+- **Role guards** compose per route: `Depends(get_current_user)` for any authenticated caller, `Depends(require_role(RoleEnum.PG_OWNER))` for role-restricted ones. `SUPER_ADMIN` (platform-wide role) passes every guard.
+
+#### Register API
+
+Self-service tenant registration (Phase 1.4.1). Creates a Nestro user profile with `RoleEnum.TENANT`; the Supabase Auth account side ships with the Supabase-first signup milestone.
+
+- **Endpoint** — `POST /api/v1/auth/register` (`app/api/v1/routes/auth.py`), visible in Swagger and OpenAPI.
 - **Request** (`RegisterRequest`): `email` (EmailStr, normalized to lowercase), `phone`, `full_name` (stripped), `password` (min 8 chars). Strict: unknown fields rejected (`extra="forbid"`).
 - **Response** (`RegisterResponse`, 201): `id` (UUID), `email`, `phone`, `full_name`, `created_at` — never the password.
-- **Service** — `AuthService` (`app/services/auth_service.py`) is the first service layer: duplicate-email check → transient password hash → create user with `RoleEnum.TENANT`.
-- **Password hashing is transient** (`app/core/security.py`, Argon2id via `pwdlib`): hashes are computed for validation and then discarded. **No hash is ever persisted** — the `users` table holds no password/auth columns, and credentials remain Supabase Auth's job (see `users table`).
+- **Service** — `AuthService` (`app/services/auth_service.py`): duplicate-email check → transient password hash → create user with `RoleEnum.TENANT`.
+- **Password hashing is transient** (`app/core/security.py`, Argon2id via `pwdlib`): hashes are computed for validation and then discarded. **No hash is ever persisted** — credentials remain Supabase Auth's job (see `users table`).
 
 | Method | Path                    | Success | Errors                                                   |
 | ------ | ----------------------- | ------- | -------------------------------------------------------- |
@@ -230,7 +242,7 @@ uv run pytest
 ```
 app/
 ├── api/v1/     versioned HTTP routes (health, auth/register)
-├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (password hashing)
+├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (JWT verification + JWKS, password hashing)
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
 ├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, enums)
 ├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)

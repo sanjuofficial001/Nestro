@@ -4,12 +4,29 @@ Security is implemented in the FastAPI backend using OWASP guidance (OWASP Top 1
 
 ## 1. JWT Authentication
 
-**Model:** Supabase Auth issues JWTs. The backend is stateless — no session store — and validates the token on every request before any business logic runs.
+**Model:** Supabase Auth issues JWTs. The backend is stateless — no session store, no stored password or hash — and validates the token on every request before any business logic runs. Nestro owns application identity and authorization; Supabase owns authentication credentials.
+
+**Flow**
+
+```text
+Supabase Auth
+    ↓
+Supabase access JWT (RS256)
+    ↓
+Nestro JWT verification (signature, exp, aud, iss, algorithm)
+    ↓
+Verified token email → case-insensitive Nestro User lookup
+    ↓
+Nestro User (role / is_active from the DB)
+    ↓
+Nestro role / organization authorization
+```
 
 **FastAPI implementation**
 
 - A single `HTTPBearer` security scheme is registered once (`security = HTTPBearer(auto_error=False)`).
-- A `get_current_user` dependency parses the token, verifies signature against Supabase JWKS, checks `exp`, `aud`, and `iss`, and resolves the `sub` to a `User` row.
+- A `get_current_user` dependency verifies the token signature (against the Supabase project JWKS endpoint — `<SUPABASE_URL>/auth/v1/.well-known/jwks.json`, fetched and cached via PyJWT's `PyJWKClient`; a static `JWT_VERIFICATION_KEY` PEM covers offline dev/tests), checks `exp`, `aud`, and `iss`, then resolves the verified `email` claim to a `User` row by case-insensitive lookup. The token `sub` is a Supabase auth UUID and is never used as a Nestro user id.
+- Unknown emails and `is_active = false` users are rejected with the same uniform `401` as invalid tokens; nothing about the cause is leaked.
 - Endpoints declare `user: User = Depends(get_current_user)`; rate-limited and logged centrally.
 - Tokens are never reflected in responses, logs, or error messages.
 
@@ -24,6 +41,7 @@ app = FastAPI()
 
 - JWT decoding uses `PyJWT` with `algorithms=["RS256"]`, the only algorithm Supabase signs with — `none` and HS-family algorithms are never accepted.
 - `exp`, `aud`, and `iss` are validated; a token failing any check yields `401`, identical for expired and malformed tokens so the client cannot distinguish causes to probe.
+- JWKS retrieval happens only inside the cached `get_verifier()` singleton — never in route dependencies.
 - Failed-auth responses are uniform minimal bodies (`{"detail": "..."}`) with no stack traces (ASVS V3: error handling leaks nothing).
 
 See `AUTHENTICATION_SPEC.md` for the full flow and role model.

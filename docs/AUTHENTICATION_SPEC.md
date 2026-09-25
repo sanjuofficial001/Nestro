@@ -45,8 +45,8 @@ Roles map to earlier product roles: owner → `PG_OWNER`, manager → `MANAGER`,
 
 ## Authorization Rules
 
-1. **Identity first** — the backend resolves the Supabase JWT to a `user_id` before any business logic runs.
-2. **Single source of truth** — role lives in Supabase Auth user metadata; the backend reads it per request and never trusts a client-supplied role.
+1. **Identity first** — the backend resolves the Supabase JWT to a Nestro `User` (verified token email → case-insensitive `users.email` lookup) before any business logic runs.
+2. **Single source of truth** — the application role lives in the Nestro `users` table; the backend reads it per request and never trusts a client-supplied role claim.
 3. **Row-level scoping** — every tenant/PG-sensitive query is filtered by the user's role scope (own/assigned PGs); no unscoped reads on the backend.
 4. **PG scoping** — `PG_OWNER`, `MANAGER`, and `STAFF` operate only on PGs in their membership set (via a `pg_members` association with a role per PG).
 5. **TENANT is user-scoped** — a tenant sees only their own PG, stay, rent, invoices, and complaints.
@@ -87,8 +87,7 @@ sequenceDiagram
     end
     SA-->>C: Session (access JWT + refresh token)
     C->>B: Request + Authorization: Bearer <JWT>
-    B->>SA: Verify JWT (JWKS / introspect)
-    SA-->>B: Valid + claims (sub, role, metadata)
+    B->>B: Verify JWT (JWKS, exp/aud/iss/algorithm) → resolve Nestro user by email
     B->>B: Resolve role scope (own / assigned PGs)
     B->>DB: Scoped query
     DB-->>B: Result set
@@ -158,16 +157,16 @@ sequenceDiagram
 
 ## Token Contents (JWT Claims)
 
-| Claim             | Source                        | Used for                  |
-| ----------------- | ----------------------------- | ------------------------- |
-| `sub`             | Supabase                      | Backend user identity     |
-| `aud`             | Supabase                      | Audience validation       |
-| `exp` / `iat`     | Supabase                      | Expiry checks             |
-| `email` / `phone` | Supabase                      | Display / lookup          |
-| `role`            | App metadata                  | Authorization decisions   |
-| `pg_scope`        | App metadata (mirrored in DB) | PG membership for scoping |
+| Claim             | Source                                      | Used for                                                  |
+| ----------------- | ------------------------------------------- | --------------------------------------------------------- |
+| `sub`             | Supabase                                    | Supabase auth UUID (never a Nestro user id)               |
+| `aud`             | Supabase                                    | Audience validation                                       |
+| `exp` / `iat`     | Supabase                                    | Expiry checks                                             |
+| `email` / `phone` | Supabase                                    | Verified identity → case-insensitive `users.email` lookup |
+| `role`            | Nestro `users` table (claim is a hint only) | Authorization decisions — the DB row is the authority     |
+| `pg_scope`        | App metadata (mirrored in DB)               | PG membership for scoping                                 |
 
-`role` and `pg_scope` mirror the authoritative rows in the `users` and `pg_members` tables. The backend always re-reads membership from the database on sensitive operations; JWT claims are a fast path, never the sole authority.
+`role` and `pg_scope` mirror the authoritative rows in the `users` and `pg_members` tables. The backend always re-reads role and membership from the database on sensitive operations; JWT claims are a fast path, never the sole authority.
 
 ## Security Notes
 

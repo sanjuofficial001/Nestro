@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     environment: Literal["development", "staging", "production"] = "development"
     debug: bool = False
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/nestro"
+    supabase_url: str = ""
     jwt_secret: str = "change-me"
     jwt_verification_key: str = ""
     jwt_issuer: str = "supabase"

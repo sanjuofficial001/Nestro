@@ -5,9 +5,12 @@ re-implements authentication or role checks.
 
 - `get_current_user` — the single identity seam (SECURITY.md §1). Accepts the
   `Authorization: Bearer <JWT>` header (specific scheme via `HTTPBearer`),
-  verifies the token, resolves `sub` to a platform `User`, and rejects missing,
-  malformed, expired, unknown-`sub`, and inactive users — all as one generic
-  401 so causes stay indistinguishable (SECURITY.md §1).
+  verifies the Supabase token (signature, expiry, issuer, audience, algorithm),
+  then resolves the verified token `email` to a platform `User` via a
+  case-insensitive lookup. Missing, malformed, expired, unknown-email, and
+  inactive users are all rejected as one generic 401 so causes stay
+  indistinguishable (SECURITY.md §1). The token `sub` is a Supabase auth UUID
+  and is never used to look up Nestro users.
 - `require_role(...)` / `require_any_role(...)` — reusable role guards built on
   `get_current_user`. The DB row is the role authority; the JWT `role` claim is
   never trusted. The platform-wide role (SUPER_ADMIN) passes any guard.
@@ -45,7 +48,7 @@ def get_current_user(
         claims = get_verifier().verify(credentials.credentials)
     except AuthenticationError:
         raise
-    user = UserRepository(db).get_by_id(claims.sub)
+    user = UserRepository(db).get_by_email(claims.email)
     if user is None or not user.is_active:
         raise AuthenticationError()
     return user
