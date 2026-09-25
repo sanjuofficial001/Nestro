@@ -28,6 +28,16 @@ class BuildingRepository:
             )
         )
 
+    def exists_by_name(self, property_id: UUID, name: str) -> bool:
+        return self._session.scalar(
+            select(Building.id)
+            .where(
+                Building.property_id == property_id,
+                Building.name == name,
+            )
+            .limit(1)
+        ) is not None
+
     def create(self, data: BuildingCreate) -> Building:
         building = Building(**data.model_dump())
         self._session.add(building)
