@@ -3,6 +3,7 @@
 from app.schemas.auth import RegisterRequest, RegisterResponse
 from app.schemas.auth_me import AuthMeResponse
 from app.schemas.bed import BedCreate, BedRead
+from app.schemas.bed_api import BedUpdate
 from app.schemas.building import BuildingCreate, BuildingRead
 from app.schemas.building_api import BuildingUpdate
 from app.schemas.floor import FloorCreate, FloorRead
@@ -24,6 +25,7 @@ __all__ = [
     "AuthMeResponse",
     "BedCreate",
     "BedRead",
+    "BedUpdate",
     "BuildingCreate",
     "BuildingRead",
     "BuildingUpdate",

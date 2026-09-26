@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from app.api.v1.routes.auth import router as auth_router
+from app.api.v1.routes.beds import router as beds_router
 from app.api.v1.routes.buildings import router as buildings_router
 from app.api.v1.routes.floors import router as floors_router
 from app.api.v1.routes.health import router as health_router
@@ -16,3 +17,4 @@ api_router.include_router(properties_router)
 api_router.include_router(buildings_router)
 api_router.include_router(floors_router)
 api_router.include_router(rooms_router)
+api_router.include_router(beds_router)
