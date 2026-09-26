@@ -44,6 +44,7 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
 "beds",
                 "resident_profiles",
                 "tenant_stays",
+                "complaints",
             } <= tables
         assert "alembic_version" in tables
 
@@ -177,6 +178,7 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
                     "beds",
                     "resident_profiles",
                     "tenant_stays",
+                    "complaints",
                 ]
         }
         assert fk_targets["buildings"] == {"organizations", "properties"}
@@ -248,6 +250,42 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
             for row in conn.execute("pragma index_list(tenant_stays)")
         }
         assert ("uq_tenant_stays_active_bed", True, True) in stay_indexes
+
+        complaint_columns = {
+            row[1] for row in conn.execute("pragma table_info(complaints)")
+        }
+        assert {
+            "id",
+            "organization_id",
+            "property_id",
+            "resident_profile_id",
+            "title",
+            "description",
+            "category",
+            "priority",
+            "status",
+            "assigned_to_member_id",
+            "resolved_at",
+            "created_at",
+            "updated_at",
+        } <= complaint_columns
+        assert fk_targets["complaints"] == {
+            "organizations",
+            "properties",
+            "resident_profiles",
+            "organization_members",
+        }
+
+        complaint_indexes = {
+            row[1] for row in conn.execute("pragma index_list(complaints)")
+        }
+        assert {
+            "ix_complaints_organization_id",
+            "ix_complaints_property_id",
+            "ix_complaints_resident_profile_id",
+            "ix_complaints_status",
+            "ix_complaints_priority",
+        } <= complaint_indexes
 
         version = conn.execute("select version_num from alembic_version").fetchone()
         assert version is not None and version[0]
