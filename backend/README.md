@@ -582,7 +582,7 @@ Authorization: Bearer <access token>
 
 ### Complaint Foundation
 
-Resident-raised issues and their triage state. Database + models + schemas + repositories. The HTTP surface lives in [Complaint API](#complaint-api) below; resident-facing submission, comments, and the reopen audit are still future work.
+Resident-raised issues and their triage state. Database + models + schemas + repositories. The HTTP surface lives in [Complaint API](#complaint-api) and [Complaint Comment API](#complaint-comment-api) below; resident-facing submission and the reopen audit are still future work.
 
 ```text
 User
@@ -594,6 +594,8 @@ ResidentProfile
 Complaint
     ↓
 Property
+    ↓
+ComplaintComment  (discussion thread)
 ```
 
 - **complaints** — one complaint = an issue a resident (`resident_profile_id`) raised about a property (`property_id`) inside an organization (`organization_id`). `title`, `description`, `category`, `priority`, `status`, `assigned_to_member_id` (nullable), `resolved_at` (nullable), mixin timestamps. `organization_id` FK + index on every complaint (tenant boundary), plus indexes on `property_id`, `resident_profile_id`, `status`, and `priority` because those are the query shapes the API exposes.
@@ -604,7 +606,8 @@ Property
 - **`resolved_at` is never written in this milestone** — the column exists per DATABASE.md §19, but stamping it belongs to the workflow milestone alongside `complaint_comments` (§20) and the reopen audit. A complaint can reach `RESOLVED` with `resolved_at` still null.
 - **Repository** — `ComplaintRepository` (`app/repositories/complaint.py`): `get_by_id`, `list_for_org`, `create`. `list_for_org` takes optional `status` / `priority` / `resident_profile_id` filters applied in SQL; ordering is always `created_at DESC`. Every read is scoped by complaint id or organization — no unscoped read path.
 - **Schemas** — `Complaint{Base,Create,Read}` (`app/schemas/complaint.py`), strict with `extra="forbid"`; `title` bounded at 200 chars and `description` at 2000, both stripped, and an all-whitespace payload is rejected (the bound is enforced here because the columns are `TEXT` and PostgreSQL does not length-check them).
-- **Models** — `Complaint` (`app/models/complaint.py`) with bidirectional `organization` / `property` / `resident_profile` / `assigned_to_member` ↔ `complaints` relationships.
+- **Models** — `Complaint` (`app/models/complaint.py`) with bidirectional `organization` / `property` / `resident_profile` / `assigned_to_member` ↔ `complaints` relationships, plus `comments` ↔ `complaint_comments`.
+- **complaint_comments** — one immutable message in a complaint's discussion thread. `complaint_id`, `user_id`, `comment`, `is_internal` (default false), `created_at`; index on `complaint_id`. Per DATABASE.md §20 it carries **no** `organization_id` (scope is authoritative on the parent complaint) and **no** `updated_at` (comments are immutable, so the timestamp would never move), and it has no delete cascade — a complaint delete fails on the foreign key instead of silently erasing audit history.
 
 ### Complaint API
 
@@ -625,7 +628,7 @@ Org-scoped CRUD over resident complaints. A complaint is triage state, so every 
 - **Status lifecycle** — a complaint may stay put, step **one** stage forward, or step **one** stage backward along `OPEN ↔ IN_PROGRESS ↔ ON_HOLD ↔ RESOLVED → CLOSED`; a jump of two or more stages is a 409, and `CLOSED` is terminal (no reopen, not even one stage back).
 - **Read** — any member may list/get. Listing takes required `organization_id` plus optional `status`, `priority`, and `resident_profile_id`; results are ordered by `created_at DESC`. The resident filter is org-checked first so a foreign-org id returns 404 rather than leaking rows.
 - **Errors** — 401 unauthenticated/inactive · 403 `insufficient permissions` · 404 `complaint not found` / `resident profile not found` / `property not found` / `organization member not found` · 409 `invalid complaint status transition` / `a closed complaint cannot be reopened` / resident-, property-, or member-organization conflict · 422 validation (including `category` and `resolved_at` on PATCH).
-- **Not here (future work)** — resident-facing complaint submission and commenting (`complaint_comments`, DATABASE.md §20), the reopen audit, `resolved_at` stamping and notification on transition, SLA/escalation timers, assignment history, complaint dashboards, and no soft delete or `DELETE`.
+- **Not here (future work)** — resident-facing complaint submission, the reopen audit, `resolved_at` stamping and notification on transition, SLA/escalation timers, assignment history, complaint dashboards, and no soft delete or `DELETE`.
 
 | Method | Path                      | Success | Errors                                                                                      |
 | ------ | ------------------------- | ------- | ------------------------------------------------------------------------------------------- |
@@ -660,6 +663,46 @@ Authorization: Bearer <access token>
 [ { "id": "…", "property_id": "…", "resident_profile_id": "…", "category": "PLUMBING", "status": "OPEN", "priority": "MEDIUM", "…": "…" } ]
 ```
 
+### Complaint Comment API
+
+The discussion thread hanging off a complaint. Comments are **immutable**: POST and GET only, no edit, no delete, no `updated_at`. Authorization is inherited rather than reimplemented — `ComplaintCommentService` calls `ComplaintService.get_complaint` first, so a comment can never be read or written against a complaint the caller could not already reach, and there is no second role check to drift out of sync. Posting and reading are the same permission set (every org member), and `user_id` always comes from the authenticated caller, never the body.
+
+| Role        | Read | Write |
+| ----------- | ---- | ----- |
+| OWNER       | Yes  | Yes   |
+| MANAGER     | Yes  | Yes   |
+| STAFF       | Yes  | Yes   |
+| SUPER_ADMIN | Yes  | Yes   |
+
+- **Endpoints** — `GET /api/v1/complaints/{complaint_id}/comments` (200), `POST /api/v1/complaints/{complaint_id}/comments` (201) (`app/api/v1/routes/complaints.py`). Kept off `ComplaintRead`, so reading a complaint does not pull the thread.
+- **`body` on the wire, `comment` in the column** — the API field is `body` in both directions; `ComplaintCommentRead` maps it from `comment` so the column name never leaks. Bounded at 2000 chars, stripped, all-whitespace rejected, `extra="forbid"`.
+- **Ordering** — `created_at ASC` (conversation order), unpaginated.
+- **Org scope** — there is no `organization_id` to filter on, so every read is scoped by complaint id, and the service resolves and authorizes the parent complaint first. No "list all comments" method exists, so there is no unscoped read path.
+- **`is_internal` is stored but not filtered (yet)** — the flag is persisted, validated, returned, and tested, but nothing hides internal notes from a reader. Every caller who can reach this endpoint is a staff-side role, and `OrganizationRoleEnum` has no `TENANT` member, so a visibility branch would be unreachable and untestable today. **This is the one behaviour to revisit when tenant-facing complaint access lands** — internal notes must then be invisible to residents. The filter is a `.where()` on `list_for_complaint`.
+- **Errors** — 401 unauthenticated/inactive · 403 `insufficient permissions` (caller is not a member of the complaint's organization) · 404 `complaint not found` · 422 validation (blank or >2000 char `body`, or any `complaint_id` / `user_id` / `updated_at` in the body).
+
+| Method | Path                                         | Success | Errors                                                       |
+| ------ | -------------------------------------------- | ------- | ------------------------------------------------------------ |
+| GET    | `/api/v1/complaints/{complaint_id}/comments` | 200     | 403 insufficient permissions · 404 complaint not found       |
+| POST   | `/api/v1/complaints/{complaint_id}/comments` | 201     | 403 insufficient permissions · 404 complaint not found · 422 |
+
+```json
+// Post a note on the thread
+POST /api/v1/complaints/{id}/comments
+Authorization: Bearer <access token>
+{ "body": "Plumber booked for Thursday.", "is_internal": false }
+// Response 201
+{ "id": "…", "complaint_id": "…", "user_id": "…", "body": "Plumber booked for Thursday.", "is_internal": false, "created_at": "…" }
+```
+
+```json
+// Read the thread (oldest first)
+GET /api/v1/complaints/{id}/comments
+Authorization: Bearer <access token>
+// Response 200
+[ { "id": "…", "complaint_id": "…", "user_id": "…", "body": "Plumber booked for Thursday.", "is_internal": false, "created_at": "…" } ]
+```
+
 ### Migrations (Alembic)
 
 Alembic reads `DATABASE_URL` from settings and targets `Base.metadata` (importing `app.models`), so `autogenerate` reflects real schema drift. Schema changes always ship with a migration. The first migration (`create users table and role enum`) ships in `alembic/versions/`.
@@ -689,13 +732,13 @@ uv run pytest
 
 ```
 app/
-├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, complaints)
+├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, complaints, complaint comments)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (JWT verification + JWKS, password hashing)
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
-├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, complaints, enums)
-├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, complaints)
-├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, building_api, floors, floor_api, rooms, room_api, beds, bed_api, resident profiles, resident_profile_api, tenant stays, tenant_stay_api, complaints, complaint_api)
-├── services/   business logic (auth service — registration; onboarding service; property service; building service; floor service; room service; bed service; resident profile service; tenant stay service; complaint service)
+├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, complaints, complaint comments, enums)
+├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, complaints, complaint comments)
+├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, building_api, floors, floor_api, rooms, room_api, beds, bed_api, resident profiles, resident_profile_api, tenant stays, tenant_stay_api, complaints, complaint_api, complaint comments)
+├── services/   business logic (auth service — registration; onboarding service; property service; building service; floor service; room service; bed service; resident profile service; tenant stay service; complaint service; complaint comment service)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)
 tests/          pytest suite

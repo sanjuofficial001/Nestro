@@ -12,6 +12,7 @@ from app.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import RoleEnum
 
 if TYPE_CHECKING:
+    from app.models.complaint_comment import ComplaintComment
     from app.models.organization_member import OrganizationMember
 
 
@@ -32,6 +33,7 @@ class User(TimestampMixin, UUIDPrimaryKeyMixin, Base):
     members: Mapped[list[OrganizationMember]] = relationship(
         back_populates="user"
     )
+    comments: Mapped[list[ComplaintComment]] = relationship(back_populates="user")
 
     def __repr__(self) -> str:
         return f"<User id={self.id!r} email={self.email!r} role={self.role.value}>"

@@ -8,7 +8,8 @@ several organizations stays unambiguous), and where triage stands (`status`).
 
 `resolved_at` is recorded by DATABASE.md §19 and is intentionally left unwritten
 in this milestone — stamping it belongs to the workflow milestone, together with
-`complaint_comments` (§20) and the reopen audit.
+the reopen audit. The discussion thread lives in `complaint_comments` (§20),
+reached through the `comments` relationship.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from app.models.enums import (
 )
 
 if TYPE_CHECKING:
+    from app.models.complaint_comment import ComplaintComment
     from app.models.organization import Organization
     from app.models.organization_member import OrganizationMember
     from app.models.property import Property
@@ -78,6 +80,12 @@ class Complaint(TimestampMixin, UUIDPrimaryKeyMixin, Base):
     )
     assigned_to_member: Mapped[OrganizationMember | None] = relationship(
         back_populates="complaints"
+    )
+    # No delete cascade: comments are immutable audit history, so a complaint delete
+    # must fail loudly on the NOT NULL foreign key rather than silently drop the
+    # thread. Complaint deletion is out of scope until a retention policy exists.
+    comments: Mapped[list[ComplaintComment]] = relationship(
+        back_populates="complaint"
     )
 
     def __repr__(self) -> str:

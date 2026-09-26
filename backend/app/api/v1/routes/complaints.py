@@ -5,8 +5,9 @@ any member may read, and the platform-wide SUPER_ADMIN role bypasses. Only
 `organization_id` is taken from the caller; a complaint's organization always
 derives from the row itself.
 
-Resident-facing complaint creation, complaint comments, and the reopen/audit
-workflow are separate future work (API_SPEC §10, DATABASE.md §20).
+Resident-facing complaint creation and the reopen/audit workflow are separate
+future work (API_SPEC §10). The comment thread is org-scoped and lives at
+`/complaints/{complaint_id}/comments` — see the comment handlers below.
 """
 
 from typing import Annotated
@@ -22,6 +23,11 @@ from app.models.enums import ComplaintPriorityEnum, ComplaintStatusEnum
 from app.models.user import User
 from app.schemas.complaint import ComplaintCreate, ComplaintRead
 from app.schemas.complaint_api import ComplaintUpdate
+from app.schemas.complaint_comment import (
+    ComplaintCommentCreate,
+    ComplaintCommentRead,
+)
+from app.services.complaint_comment_service import ComplaintCommentService
 from app.services.complaint_service import ComplaintService
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
@@ -97,3 +103,45 @@ def update_complaint(
     except NotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from None
     return ComplaintRead.model_validate(complaint)
+
+
+# --- comment thread ---------------------------------------------------------
+# Comments are immutable: there is no PATCH or DELETE on this thread. `is_internal`
+# is accepted and returned but not filtered — see the service docstring.
+
+
+@router.get("/{complaint_id}/comments", response_model=list[ComplaintCommentRead])
+def list_complaint_comments(
+    complaint_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> list[ComplaintCommentRead]:
+    try:
+        comments = ComplaintCommentService(db).list_comments(current_user, complaint_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return [ComplaintCommentRead.model_validate(c) for c in comments]
+
+
+@router.post(
+    "/{complaint_id}/comments",
+    response_model=ComplaintCommentRead,
+    status_code=201,
+)
+def create_complaint_comment(
+    complaint_id: UUID,
+    payload: ComplaintCommentCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ComplaintCommentRead:
+    try:
+        comment = ComplaintCommentService(db).create_comment(
+            current_user, complaint_id, payload
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return ComplaintCommentRead.model_validate(comment)
