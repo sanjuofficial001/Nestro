@@ -11,7 +11,7 @@ Capacity is intentionally absent: it is derived from the room's `Bed` rows
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import RoomTypeEnum
-from app.schemas.property import _strip
+from app.schemas.validation import strip_optional
 
 
 class RoomUpdate(BaseModel):
@@ -23,4 +23,4 @@ class RoomUpdate(BaseModel):
     @field_validator("room_number")
     @classmethod
     def strip_room_number(cls, value: str | None) -> str | None:
-        return _strip(value) if value else value
+        return strip_optional(value)

@@ -14,7 +14,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import RoomTypeEnum
-from app.schemas.property import _strip
+from app.schemas.validation import strip_text
 
 
 class RoomBase(BaseModel):
@@ -28,7 +28,7 @@ class RoomBase(BaseModel):
     @field_validator("room_number")
     @classmethod
     def strip_room_number(cls, value: str) -> str:
-        return _strip(value)
+        return strip_text(value)
 
 
 class RoomCreate(RoomBase):

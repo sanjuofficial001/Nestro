@@ -15,7 +15,7 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import TenantStayStatusEnum
-from app.schemas.property import _strip_optional
+from app.schemas.validation import strip_optional
 
 
 class TenantStayUpdate(BaseModel):
@@ -28,4 +28,4 @@ class TenantStayUpdate(BaseModel):
     @field_validator("notes")
     @classmethod
     def strip_notes(cls, value: str | None) -> str | None:
-        return _strip_optional(value)
+        return strip_optional(value)

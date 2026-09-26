@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.property import _strip, _strip_optional
+from app.schemas.validation import strip_optional, strip_text
 
 
 class ResidentProfileBase(BaseModel):
@@ -28,17 +28,17 @@ class ResidentProfileBase(BaseModel):
     @field_validator("emergency_contact_name", "emergency_contact_phone")
     @classmethod
     def strip_short_fields(cls, value: str) -> str:
-        return _strip(value)
+        return strip_text(value)
 
     @field_validator("address")
     @classmethod
     def strip_address(cls, value: str) -> str:
-        return _strip(value)
+        return strip_text(value)
 
     @field_validator("notes")
     @classmethod
     def strip_notes(cls, value: str | None) -> str | None:
-        return _strip_optional(value)
+        return strip_optional(value)
 
 
 class ResidentProfileCreate(ResidentProfileBase):

@@ -8,10 +8,7 @@ are immutable — they cannot be sent, so they can never change.
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import PropertyStatusEnum
-
-
-def _strip_optional(value: str | None) -> str | None:
-    return value.strip() if value else value
+from app.schemas.validation import strip_optional
 
 
 class PropertyUpdate(BaseModel):
@@ -26,9 +23,9 @@ class PropertyUpdate(BaseModel):
     @field_validator("name")
     @classmethod
     def strip_name(cls, value: str | None) -> str | None:
-        return _strip_optional(value)
+        return strip_optional(value)
 
     @field_validator("address", "rules")
     @classmethod
     def strip_long_text(cls, value: str | None) -> str | None:
-        return _strip_optional(value)
+        return strip_optional(value)

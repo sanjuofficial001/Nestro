@@ -7,7 +7,7 @@ are immutable — they cannot be sent, so they can never change.
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.property import _strip
+from app.schemas.validation import strip_optional
 
 
 class FloorUpdate(BaseModel):
@@ -19,4 +19,4 @@ class FloorUpdate(BaseModel):
     @field_validator("name")
     @classmethod
     def strip_name(cls, value: str | None) -> str | None:
-        return _strip(value) if value else value
+        return strip_optional(value)

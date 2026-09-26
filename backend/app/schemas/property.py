@@ -11,14 +11,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import PropertyStatusEnum, PropertyTypeEnum
-
-
-def _strip(value: str) -> str:
-    return value.strip()
-
-
-def _strip_optional(value: str | None) -> str | None:
-    return value.strip() if value else value
+from app.schemas.validation import strip_optional, strip_text
 
 
 class PropertyBase(BaseModel):
@@ -35,12 +28,12 @@ class PropertyBase(BaseModel):
     @field_validator("name")
     @classmethod
     def strip_name(cls, value: str) -> str:
-        return _strip(value)
+        return strip_text(value)
 
     @field_validator("address", "rules")
     @classmethod
     def strip_long_text(cls, value: str | None) -> str | None:
-        return _strip_optional(value)
+        return strip_optional(value)
 
 
 class PropertyCreate(PropertyBase):

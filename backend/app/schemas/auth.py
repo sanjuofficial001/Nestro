@@ -10,9 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-
-def _strip(value: str) -> str:
-    return value.strip()
+from app.schemas.validation import strip_text
 
 
 class RegisterRequest(BaseModel):
@@ -31,12 +29,12 @@ class RegisterRequest(BaseModel):
     @field_validator("phone")
     @classmethod
     def strip_phone(cls, value: str) -> str:
-        return _strip(value)
+        return strip_text(value)
 
     @field_validator("full_name")
     @classmethod
     def strip_full_name(cls, value: str) -> str:
-        return _strip(value)
+        return strip_text(value)
 
 
 class RegisterResponse(BaseModel):

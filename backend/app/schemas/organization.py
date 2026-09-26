@@ -10,9 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-def _strip(value: str) -> str:
-    return value.strip()
+from app.schemas.validation import strip_optional, strip_text
 
 
 class OrganizationBase(BaseModel):
@@ -24,12 +22,12 @@ class OrganizationBase(BaseModel):
     @field_validator("name")
     @classmethod
     def strip_name(cls, value: str) -> str:
-        return _strip(value)
+        return strip_text(value)
 
     @field_validator("slug")
     @classmethod
     def validate_slug(cls, value: str) -> str:
-        stripped = _strip(value)
+        stripped = strip_optional(value)
         if stripped != value:
             raise ValueError("slug must not have leading or trailing whitespace")
         if value != value.lower():

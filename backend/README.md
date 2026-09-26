@@ -750,3 +750,10 @@ tests/          pytest suite
 - Every request/response is validated by a Pydantic model.
 - Config comes from environment variables only; no secrets in code or commits.
 - The app is built by `create_application()`; routers, exception handlers, logging, and lifespan are registered there, keeping `main.py` small.
+- Text trimming goes through `app/schemas/validation.py`: `strip_text` for required fields, `strip_optional` for optional ones. `tests/test_schema_validation.py` enforces the rule that no required string field on a request schema accepts whitespace-only input.
+
+### Validation change
+
+Required string fields now reject whitespace-only values after trimming. Requests that previously produced empty persisted values now return 422.
+
+`Field(min_length=1)` never caught this on its own: Pydantic checks `min_length` _before_ an `after`-mode validator runs, so `"   "` passed the length check and was then trimmed to `""`. Optional text (`description`, `rules`, `notes`, and nullable `*_api` PATCH fields) is unchanged and still accepts `""` to clear a value.

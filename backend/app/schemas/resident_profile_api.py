@@ -11,7 +11,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.property import _strip, _strip_optional
+from app.schemas.validation import strip_optional
 
 
 class ResidentProfileUpdate(BaseModel):
@@ -27,9 +27,9 @@ class ResidentProfileUpdate(BaseModel):
     @field_validator("emergency_contact_name", "emergency_contact_phone", "address")
     @classmethod
     def strip_fields(cls, value: str | None) -> str | None:
-        return _strip(value) if value else value
+        return strip_optional(value)
 
     @field_validator("notes")
     @classmethod
     def strip_notes(cls, value: str | None) -> str | None:
-        return _strip_optional(value)
+        return strip_optional(value)

@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.property import _strip, _strip_optional
+from app.schemas.validation import strip_optional, strip_text
 
 
 class BuildingBase(BaseModel):
@@ -24,12 +24,12 @@ class BuildingBase(BaseModel):
     @field_validator("name")
     @classmethod
     def strip_name(cls, value: str) -> str:
-        return _strip(value)
+        return strip_text(value)
 
     @field_validator("description")
     @classmethod
     def strip_description(cls, value: str | None) -> str | None:
-        return _strip_optional(value)
+        return strip_optional(value)
 
 
 class BuildingCreate(BuildingBase):

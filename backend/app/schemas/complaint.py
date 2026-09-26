@@ -20,24 +20,15 @@ from app.models.enums import (
     ComplaintPriorityEnum,
     ComplaintStatusEnum,
 )
-from app.schemas.property import _strip
+from app.schemas.validation import strip_text
 
 TITLE_MAX_LENGTH = 200
 DESCRIPTION_MAX_LENGTH = 2000
 
-
-def _strip_text(value: str | None) -> str | None:
-    """Strip surrounding whitespace and reject an all-whitespace payload.
-
-    `min_length` is checked by Pydantic before this validator runs, so `"   "`
-    would otherwise satisfy it and then store an empty string.
-    """
-    if value is None:
-        return None
-    stripped = _strip(value)
-    if not stripped:
-        raise ValueError("must not be blank")
-    return stripped
+# Re-exported under its original name so `complaint_api` and `complaint_comment`,
+# which imported it from here, keep working. The implementation now lives in
+# `app.schemas.validation`, shared with every other schema.
+_strip_text = strip_text
 
 
 class ComplaintBase(BaseModel):

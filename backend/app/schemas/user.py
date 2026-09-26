@@ -11,10 +11,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.models.enums import RoleEnum
-
-
-def _strip(value: str) -> str:
-    return value.strip()
+from app.schemas.validation import strip_text
 
 
 class UserBase(BaseModel):
@@ -28,7 +25,7 @@ class UserBase(BaseModel):
     @field_validator("full_name")
     @classmethod
     def strip_full_name(cls, value: str) -> str:
-        return _strip(value)
+        return strip_text(value)
 
 
 class UserCreate(UserBase):

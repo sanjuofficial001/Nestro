@@ -10,7 +10,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.schemas.property import _strip
+from app.schemas.validation import strip_text
 
 
 class FloorBase(BaseModel):
@@ -24,7 +24,7 @@ class FloorBase(BaseModel):
     @field_validator("name")
     @classmethod
     def strip_name(cls, value: str) -> str:
-        return _strip(value)
+        return strip_text(value)
 
 
 class FloorCreate(FloorBase):

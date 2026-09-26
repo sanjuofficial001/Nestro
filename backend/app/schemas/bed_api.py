@@ -11,7 +11,7 @@ rows (`COUNT(beds.id)`), never persisted or exposed.
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.enums import BedStatusEnum
-from app.schemas.property import _strip
+from app.schemas.validation import strip_optional
 
 
 class BedUpdate(BaseModel):
@@ -23,4 +23,4 @@ class BedUpdate(BaseModel):
     @field_validator("bed_number")
     @classmethod
     def strip_bed_number(cls, value: str | None) -> str | None:
-        return _strip(value) if value else value
+        return strip_optional(value)
