@@ -580,6 +580,86 @@ Authorization: Bearer <access token>
 [ { "id": "…", "bed_id": "…", "resident_profile_id": "…", "status": "ACTIVE", "start_date": "2026-01-01", "end_date": null, "…": "…" } ]
 ```
 
+### Complaint Foundation
+
+Resident-raised issues and their triage state. Database + models + schemas + repositories. The HTTP surface lives in [Complaint API](#complaint-api) below; resident-facing submission, comments, and the reopen audit are still future work.
+
+```text
+User
+    ↓  (organization_members)
+Organization Member
+    ↓
+ResidentProfile
+    ↓
+Complaint
+    ↓
+Property
+```
+
+- **complaints** — one complaint = an issue a resident (`resident_profile_id`) raised about a property (`property_id`) inside an organization (`organization_id`). `title`, `description`, `category`, `priority`, `status`, `assigned_to_member_id` (nullable), `resolved_at` (nullable), mixin timestamps. `organization_id` FK + index on every complaint (tenant boundary), plus indexes on `property_id`, `resident_profile_id`, `status`, and `priority` because those are the query shapes the API exposes.
+- **Category** — `ComplaintCategoryEnum` (`MAINTENANCE`, `ELECTRICAL`, `PLUMBING`, `FOOD`, `HOUSEKEEPING`, `SECURITY`, `INTERNET`, `OTHER`), native PostgreSQL ENUM `complaint_category`. Fixed at creation: a complaint is filed under the category it was raised as, so `ComplaintUpdate` does not accept it and a PATCH carrying it is a 422.
+- **Priority** — `ComplaintPriorityEnum` (`LOW`, `MEDIUM`, `HIGH`, `URGENT`), native ENUM `complaint_priority`; defaults to `MEDIUM` on create and is editable.
+- **Status** — `ComplaintStatusEnum` (`OPEN`, `IN_PROGRESS`, `ON_HOLD`, `RESOLVED`, `CLOSED`), native ENUM `complaint_status`; defaults to `OPEN` on create. **Declaration order is the workflow order** and is part of the contract — the service derives legal transitions from it. Prefer adding a new stage at the end of the enum over reordering it.
+- **Assignment is a membership, not a user** — `assigned_to_member_id` → `organization_members.id`, not `users.id`. A user can belong to several organizations, so a bare user id would be ambiguous about which org the assignment was made in.
+- **`resolved_at` is never written in this milestone** — the column exists per DATABASE.md §19, but stamping it belongs to the workflow milestone alongside `complaint_comments` (§20) and the reopen audit. A complaint can reach `RESOLVED` with `resolved_at` still null.
+- **Repository** — `ComplaintRepository` (`app/repositories/complaint.py`): `get_by_id`, `list_for_org`, `create`. `list_for_org` takes optional `status` / `priority` / `resident_profile_id` filters applied in SQL; ordering is always `created_at DESC`. Every read is scoped by complaint id or organization — no unscoped read path.
+- **Schemas** — `Complaint{Base,Create,Read}` (`app/schemas/complaint.py`), strict with `extra="forbid"`; `title` bounded at 200 chars and `description` at 2000, both stripped, and an all-whitespace payload is rejected (the bound is enforced here because the columns are `TEXT` and PostgreSQL does not length-check them).
+- **Models** — `Complaint` (`app/models/complaint.py`) with bidirectional `organization` / `property` / `resident_profile` / `assigned_to_member` ↔ `complaints` relationships.
+
+### Complaint API
+
+Org-scoped CRUD over resident complaints. A complaint is triage state, so every reference on it is resolved and ownership-checked before it is stored and every operation is gated on the caller's membership in the complaint's organization. Authorization mirrors the Property/Building/Floor/Room/Bed/Resident Profile/Tenant Stay APIs: it derives from `OrganizationMember.role` (**not** `users.role`), except the platform-wide SUPER_ADMIN bypass. A complaint's organization is never taken from a body field beyond `organization_id` on create; single-complaint routes derive it from the row itself.
+
+| Role        | Read | Write |
+| ----------- | ---- | ----- |
+| OWNER       | Yes  | Yes   |
+| MANAGER     | Yes  | Yes   |
+| STAFF       | Yes  | No    |
+| SUPER_ADMIN | Yes  | Yes   |
+
+- **Endpoints** — `POST /api/v1/complaints` (201), `GET /api/v1/complaints?organization_id=<uuid>[&status=&priority=&resident_profile_id=]`, `GET /api/v1/complaints/{id}`, `PATCH /api/v1/complaints/{id}` (`app/api/v1/routes/complaints.py`).
+- **Guard** — `require_org_roles(...)` (`app/api/permissions.py`), the org-scoped helper shared with every org-scoped API.
+- **Service** — `ComplaintService` (`app/services/complaint_service.py`) composes membership resolution, property/resident/assignee existence + ownership checks (`PropertyRepository`, `ResidentProfileRepository`, `OrganizationMemberRepository`), and complaint data access (`ComplaintRepository`).
+- **Create** (`ComplaintCreate`) — requires OWNER/MANAGER membership; the referenced property, resident profile, and (when given) assignee must each exist and belong to the same organization.
+- **Update** (`ComplaintUpdate`) — only `title`, `description`, `status`, `priority`, and `assigned_to_member_id` are editable; `organization_id`, `property_id`, `resident_profile_id`, and `category` are structurally immutable (not even accepted in the request body), which is what keeps "what/where/who raised it" fixed. Omitted fields are left unchanged; `null` never clears a value.
+- **Status lifecycle** — a complaint may stay put, step **one** stage forward, or step **one** stage backward along `OPEN ↔ IN_PROGRESS ↔ ON_HOLD ↔ RESOLVED → CLOSED`; a jump of two or more stages is a 409, and `CLOSED` is terminal (no reopen, not even one stage back).
+- **Read** — any member may list/get. Listing takes required `organization_id` plus optional `status`, `priority`, and `resident_profile_id`; results are ordered by `created_at DESC`. The resident filter is org-checked first so a foreign-org id returns 404 rather than leaking rows.
+- **Errors** — 401 unauthenticated/inactive · 403 `insufficient permissions` · 404 `complaint not found` / `resident profile not found` / `property not found` / `organization member not found` · 409 `invalid complaint status transition` / `a closed complaint cannot be reopened` / resident-, property-, or member-organization conflict · 422 validation (including `category` and `resolved_at` on PATCH).
+- **Not here (future work)** — resident-facing complaint submission and commenting (`complaint_comments`, DATABASE.md §20), the reopen audit, `resolved_at` stamping and notification on transition, SLA/escalation timers, assignment history, complaint dashboards, and no soft delete or `DELETE`.
+
+| Method | Path                      | Success | Errors                                                                                      |
+| ------ | ------------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/complaints`      | 201     | 403 insufficient permissions · 404 property/resident/member not found · 409 ownership · 422 |
+| GET    | `/api/v1/complaints`      | 200     | 403 insufficient permissions · 404 resident profile not found · 422 missing/invalid query   |
+| GET    | `/api/v1/complaints/{id}` | 200     | 403 insufficient permissions · 404 complaint not found                                      |
+| PATCH  | `/api/v1/complaints/{id}` | 200     | 403 insufficient permissions · 404 complaint/member not found · 409 lifecycle · 422         |
+
+```json
+// Create (log an issue on a resident's behalf)
+POST /api/v1/complaints
+Authorization: Bearer <access token>
+{ "organization_id": "…", "property_id": "…", "resident_profile_id": "…", "title": "Tap leaking", "description": "The bathroom tap drips constantly.", "category": "PLUMBING" }
+// Response 201
+{ "id": "…", "organization_id": "…", "property_id": "…", "resident_profile_id": "…", "title": "Tap leaking", "description": "The bathroom tap drips constantly.", "category": "PLUMBING", "priority": "MEDIUM", "status": "OPEN", "assigned_to_member_id": null, "resolved_at": null, "created_at": "…", "updated_at": "…" }
+```
+
+```json
+// Update (triage) — one step forward, and assign a handler
+PATCH /api/v1/complaints/{id}
+Authorization: Bearer <access token>
+{ "status": "IN_PROGRESS", "priority": "HIGH", "assigned_to_member_id": "…", "title": "  Tap leaking badly  " }
+// Response 200
+{ "id": "…", "…": "…", "title": "Tap leaking badly", "status": "IN_PROGRESS", "priority": "HIGH", "assigned_to_member_id": "…", "resolved_at": null }
+```
+
+```json
+// List (any member); optional status / priority / resident_profile_id narrow the result
+GET /api/v1/complaints?organization_id=…&status=OPEN
+Authorization: Bearer <access token>
+// Response 200
+[ { "id": "…", "property_id": "…", "resident_profile_id": "…", "category": "PLUMBING", "status": "OPEN", "priority": "MEDIUM", "…": "…" } ]
+```
+
 ### Migrations (Alembic)
 
 Alembic reads `DATABASE_URL` from settings and targets `Base.metadata` (importing `app.models`), so `autogenerate` reflects real schema drift. Schema changes always ship with a migration. The first migration (`create users table and role enum`) ships in `alembic/versions/`.
@@ -609,13 +689,13 @@ uv run pytest
 
 ```
 app/
-├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
+├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, complaints)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (JWT verification + JWKS, password hashing)
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
-├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, enums)
-├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
-├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, building_api, floors, floor_api, rooms, room_api, beds, bed_api, resident profiles, resident_profile_api, tenant stays, tenant_stay_api)
-├── services/   business logic (auth service — registration; onboarding service; property service; building service; floor service; room service; bed service; resident profile service; tenant stay service)
+├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, complaints, enums)
+├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, complaints)
+├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, building_api, floors, floor_api, rooms, room_api, beds, bed_api, resident profiles, resident_profile_api, tenant stays, tenant_stay_api, complaints, complaint_api)
+├── services/   business logic (auth service — registration; onboarding service; property service; building service; floor service; room service; bed service; resident profile service; tenant stay service; complaint service)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)
 tests/          pytest suite

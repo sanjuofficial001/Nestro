@@ -6,6 +6,8 @@ from app.schemas.bed import BedCreate, BedRead
 from app.schemas.bed_api import BedUpdate
 from app.schemas.building import BuildingCreate, BuildingRead
 from app.schemas.building_api import BuildingUpdate
+from app.schemas.complaint import ComplaintCreate, ComplaintRead
+from app.schemas.complaint_api import ComplaintUpdate
 from app.schemas.floor import FloorCreate, FloorRead
 from app.schemas.floor_api import FloorUpdate
 from app.schemas.onboarding import OnboardingRequest, OnboardingResponse
@@ -31,6 +33,9 @@ __all__ = [
     "BuildingCreate",
     "BuildingRead",
     "BuildingUpdate",
+    "ComplaintCreate",
+    "ComplaintRead",
+    "ComplaintUpdate",
     "FloorCreate",
     "FloorRead",
     "FloorUpdate",

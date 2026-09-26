@@ -2,8 +2,12 @@
 
 from app.models.bed import Bed
 from app.models.building import Building
+from app.models.complaint import Complaint
 from app.models.enums import (
     BedStatusEnum,
+    ComplaintCategoryEnum,
+    ComplaintPriorityEnum,
+    ComplaintStatusEnum,
     OrganizationRoleEnum,
     PropertyStatusEnum,
     PropertyTypeEnum,
@@ -24,6 +28,10 @@ __all__ = [
     "Bed",
     "BedStatusEnum",
     "Building",
+    "Complaint",
+    "ComplaintCategoryEnum",
+    "ComplaintPriorityEnum",
+    "ComplaintStatusEnum",
     "Floor",
     "Organization",
     "OrganizationMember",

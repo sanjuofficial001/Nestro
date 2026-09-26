@@ -13,6 +13,7 @@ from app.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.enums import OrganizationRoleEnum
 
 if TYPE_CHECKING:
+    from app.models.complaint import Complaint
     from app.models.organization import Organization
     from app.models.resident_profile import ResidentProfile
     from app.models.user import User
@@ -37,6 +38,7 @@ class OrganizationMember(TimestampMixin, UUIDPrimaryKeyMixin, Base):
     resident_profile: Mapped[ResidentProfile | None] = relationship(
         back_populates="organization_member"
     )
+    complaints: Mapped[list[Complaint]] = relationship(back_populates="assigned_to_member")
 
     def __repr__(self) -> str:
         return (

@@ -83,3 +83,40 @@ class TenantStayStatusEnum(StrEnum):
     ACTIVE = "ACTIVE"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
+
+
+class ComplaintCategoryEnum(StrEnum):
+    """What a complaint is about. PostgreSQL stores this as a native ENUM (`complaint_category`)."""
+
+    MAINTENANCE = "MAINTENANCE"
+    ELECTRICAL = "ELECTRICAL"
+    PLUMBING = "PLUMBING"
+    FOOD = "FOOD"
+    HOUSEKEEPING = "HOUSEKEEPING"
+    SECURITY = "SECURITY"
+    INTERNET = "INTERNET"
+    OTHER = "OTHER"
+
+
+class ComplaintPriorityEnum(StrEnum):
+    """Complaint urgency. PostgreSQL stores this as a native ENUM (`complaint_priority`)."""
+
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    URGENT = "URGENT"
+
+
+class ComplaintStatusEnum(StrEnum):
+    """Triage lifecycle. PostgreSQL stores this as a native ENUM (`complaint_status`).
+
+    The order below is the workflow order: a complaint moves one step forward or
+    backward at a time, and `CLOSED` is terminal — reopening is a future,
+    audited workflow.
+    """
+
+    OPEN = "OPEN"
+    IN_PROGRESS = "IN_PROGRESS"
+    ON_HOLD = "ON_HOLD"
+    RESOLVED = "RESOLVED"
+    CLOSED = "CLOSED"

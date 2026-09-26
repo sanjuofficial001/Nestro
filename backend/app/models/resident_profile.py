@@ -19,6 +19,7 @@ from app.db.base import Base
 from app.db.mixins import TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.complaint import Complaint
     from app.models.organization import Organization
     from app.models.organization_member import OrganizationMember
     from app.models.property import Property
@@ -52,6 +53,7 @@ class ResidentProfile(TimestampMixin, UUIDPrimaryKeyMixin, Base):
     )
     property: Mapped[Property | None] = relationship(back_populates="resident_profiles")
     tenant_stays: Mapped[list[TenantStay]] = relationship(back_populates="resident_profile")
+    complaints: Mapped[list[Complaint]] = relationship(back_populates="resident_profile")
 
     def __repr__(self) -> str:
         return f"<ResidentProfile id={self.id!r} member={self.organization_member_id!r}>"
