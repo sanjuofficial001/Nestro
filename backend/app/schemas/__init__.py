@@ -21,6 +21,7 @@ from app.schemas.resident_profile_api import ResidentProfileUpdate
 from app.schemas.room import RoomCreate, RoomRead
 from app.schemas.room_api import RoomUpdate
 from app.schemas.tenant_stay import TenantStayCreate, TenantStayRead
+from app.schemas.tenant_stay_api import TenantStayUpdate
 
 __all__ = [
     "AuthMeResponse",
@@ -52,4 +53,5 @@ __all__ = [
     "RoomUpdate",
     "TenantStayCreate",
     "TenantStayRead",
+    "TenantStayUpdate",
 ]

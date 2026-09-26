@@ -1,7 +1,8 @@
 """Data access for tenant stays. Repository layer only — no services, no
 endpoints.
 
-Reads are keyed by stay id or scoped by organization / resident / bed. The
+Reads are keyed by stay id or scoped by organization / resident / bed, with an
+optional `status` filter applied in SQL. The
 `uq_tenant_stays_active_bed` partial unique index (bed + status = ACTIVE) is
 the database-level guarantee that a bed has at most one open stay; the
 repository surfaces it as `get_active_for_bed`.
@@ -24,32 +25,31 @@ class TenantStayRepository:
     def get_by_id(self, stay_id: UUID) -> TenantStay | None:
         return self._session.get(TenantStay, stay_id)
 
-    def list_for_org(self, organization_id: UUID) -> list[TenantStay]:
-        return list(
-            self._session.scalars(
-                select(TenantStay)
-                .where(TenantStay.organization_id == organization_id)
-                .order_by(TenantStay.start_date.desc())
-            )
-        )
+    def list_for_org(
+        self, organization_id: UUID, status: TenantStayStatusEnum | None = None
+    ) -> list[TenantStay]:
+        query = select(TenantStay).where(TenantStay.organization_id == organization_id)
+        if status is not None:
+            query = query.where(TenantStay.status == status)
+        return list(self._session.scalars(query.order_by(TenantStay.start_date.desc())))
 
-    def list_for_resident(self, resident_profile_id: UUID) -> list[TenantStay]:
-        return list(
-            self._session.scalars(
-                select(TenantStay)
-                .where(TenantStay.resident_profile_id == resident_profile_id)
-                .order_by(TenantStay.start_date.desc())
-            )
+    def list_for_resident(
+        self, resident_profile_id: UUID, status: TenantStayStatusEnum | None = None
+    ) -> list[TenantStay]:
+        query = select(TenantStay).where(
+            TenantStay.resident_profile_id == resident_profile_id
         )
+        if status is not None:
+            query = query.where(TenantStay.status == status)
+        return list(self._session.scalars(query.order_by(TenantStay.start_date.desc())))
 
-    def list_for_bed(self, bed_id: UUID) -> list[TenantStay]:
-        return list(
-            self._session.scalars(
-                select(TenantStay)
-                .where(TenantStay.bed_id == bed_id)
-                .order_by(TenantStay.start_date.desc())
-            )
-        )
+    def list_for_bed(
+        self, bed_id: UUID, status: TenantStayStatusEnum | None = None
+    ) -> list[TenantStay]:
+        query = select(TenantStay).where(TenantStay.bed_id == bed_id)
+        if status is not None:
+            query = query.where(TenantStay.status == status)
+        return list(self._session.scalars(query.order_by(TenantStay.start_date.desc())))
 
     def get_active_for_bed(self, bed_id: UUID) -> TenantStay | None:
         return self._session.scalar(

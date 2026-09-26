@@ -10,6 +10,7 @@ from app.api.v1.routes.health import router as health_router
 from app.api.v1.routes.properties import router as properties_router
 from app.api.v1.routes.resident_profiles import router as resident_profiles_router
 from app.api.v1.routes.rooms import router as rooms_router
+from app.api.v1.routes.tenant_stays import router as tenant_stays_router
 
 api_router = APIRouter()
 api_router.include_router(auth_router, prefix="/auth")
@@ -20,3 +21,4 @@ api_router.include_router(floors_router)
 api_router.include_router(rooms_router)
 api_router.include_router(beds_router)
 api_router.include_router(resident_profiles_router)
+api_router.include_router(tenant_stays_router)

@@ -503,7 +503,7 @@ Authorization: Bearer <access token>
 
 ### Tenant Stay Foundation
 
-Occupancy history and bed assignment. Database + models + repositories only — no routes, services, check-in/check-out workflows, or billing yet.
+Occupancy history and bed assignment. Database + models + schemas + repositories. The HTTP surface lives in [Tenant Stay API](#tenant-stay-api) below; check-in/check-out workflows and billing are still future work.
 
 ```text
 User
@@ -521,9 +521,64 @@ Bed
 - **Occupancy is stays, not a resident→bed column** — a "current bed" is `get_active_for_bed(bed_id)`, and the whole history (COMPLETED / CANCELLED stays) stays queryable (`list_for_bed`). Never store `resident → bed` directly (DATABASE.md §15).
 - **Status** — `TenantStayStatusEnum` (`ACTIVE`, `COMPLETED`, `CANCELLED`), native PostgreSQL ENUM `tenant_stay_status`; defaults to `ACTIVE` on create.
 - **One ACTIVE stay per bed** — enforced by a **partial unique index** `uq_tenant_stays_active_bed` on `(bed_id) WHERE status = 'ACTIVE'` (both SQLite and PostgreSQL). This is the deliberate alternative to `UNIQUE (bed_id, status)`, which would permit only a single COMPLETED stay per bed and break history. Deferred with the billing milestone: `security_deposit` and a one-ACTIVE-per-resident rule.
-- **Repository** — `TenantStayRepository` (`app/repositories/tenant_stay.py`): `get_by_id`, `list_for_org`, `list_for_resident`, `list_for_bed`, `get_active_for_bed`, `create`. Every read is scoped by stay id, organization, resident, or bed — no unscoped read path.
+- **Repository** — `TenantStayRepository` (`app/repositories/tenant_stay.py`): `get_by_id`, `list_for_org`, `list_for_resident`, `list_for_bed`, `get_active_for_bed`, `create`. The three list methods take an optional `status` filter applied in SQL; ordering is always `start_date DESC`. Every read is scoped by stay id, organization, resident, or bed — no unscoped read path.
 - **Schemas** — `TenantStay{Base,Create,Read}` (`app/schemas/tenant_stay.py`), strict with `extra="forbid"`; `end_date` / `notes` nullable, `status` defaults to `ACTIVE`.
 - **Models** — `TenantStay` (`app/models/tenant_stay.py`) with bidirectional `organization` / `resident_profile` / `property` / `bed` ↔ `tenant_stays` relationships.
+
+### Tenant Stay API
+
+Org-scoped CRUD over occupancy history. A stay is the only thing that records "this resident occupied this bed from this date", so occupancy is derived from `ACTIVE` stays — never stored on the resident or the bed. Authorization mirrors the Property/Building/Floor/Room/Bed/Resident Profile APIs: it derives from `OrganizationMember.role` (**not** `users.role`), except the platform-wide SUPER_ADMIN bypass. A stay's organization is never taken from a body field beyond `organization_id` on create; single-stay routes derive it from the row itself.
+
+| Role        | Read | Write |
+| ----------- | ---- | ----- |
+| OWNER       | Yes  | Yes   |
+| MANAGER     | Yes  | Yes   |
+| STAFF       | Yes  | No    |
+| SUPER_ADMIN | Yes  | Yes   |
+
+- **Endpoints** — `POST /api/v1/tenant-stays` (201), `GET /api/v1/tenant-stays?organization_id=<uuid>[&resident_profile_id=&bed_id=&status=]`, `GET /api/v1/tenant-stays/{id}`, `PATCH /api/v1/tenant-stays/{id}` (`app/api/v1/routes/tenant_stays.py`).
+- **Guard** — `require_org_roles(...)` (`app/api/permissions.py`), the org-scoped helper shared with every org-scoped API.
+- **Service** — `TenantStayService` (`app/services/tenant_stay_service.py`) composes membership resolution, resident/bed/property existence + ownership checks (`ResidentProfileRepository`, `BedRepository`, `PropertyRepository`), and stay data access (`TenantStayRepository`).
+- **Create** (`TenantStayCreate`) — requires OWNER/MANAGER membership; the referenced resident profile, bed, and property must each exist and belong to the same organization; the bed's real property (`bed.room.floor.building.property_id`) must equal the supplied `property_id`, so a stay can never claim a property its bed is not in; an `ACTIVE` stay on a bed that already has one → 409.
+- **Update** (`TenantStayUpdate`) — only `end_date`, `status`, and `notes` are editable; `organization_id`, `resident_profile_id`, `property_id`, `bed_id`, and `start_date` are structurally immutable (not even accepted in the request body), which is what keeps "who/where/when it began" fixed. Omitted fields are left unchanged; `null` never clears a value.
+- **Status semantics** — `ACTIVE` is the only occupied state and its `end_date` must be null; `COMPLETED` (ended on its own) and `CANCELLED` (terminated early) are closed history and always carry an `end_date`; a closed stay cannot be reopened (`COMPLETED` ↔ `CANCELLED` is allowed). `end_date` never precedes `start_date`.
+- **One ACTIVE stay per bed** — enforced in the database by `uq_tenant_stays_active_bed` and pre-checked with `get_active_for_bed`, so a collision is a 409 rather than a 500. Closing a stay frees the bed because it simply stops being `ACTIVE`; nothing is deleted.
+- **Read** — any member may list/get. Listing takes required `organization_id` plus optional `resident_profile_id`, `bed_id`, and `status`; results are ordered by `start_date DESC`. Resident/bed filters are org-checked first so a foreign-org id returns 404 rather than leaking rows.
+- **Errors** — 401 unauthenticated/inactive · 403 `insufficient permissions` · 404 `tenant stay not found` / `resident profile not found` / `bed not found` / `property not found` · 409 `end_date must not precede start_date` / `an active stay cannot have an end_date` / `a closed stay requires an end_date` / `a closed stay cannot be reopened` / `bed already has an active stay` / resident-organization, bed-organization, or property-organization conflict / `bed does not belong to the property` · 422 validation.
+- **Not here (future work)** — a one-ACTIVE-per-resident constraint and `security_deposit` (deferred to the billing milestone, DATABASE.md §15), billing/rent/invoices, bed transfers, resident reassignment, occupancy dashboards, notifications, and no soft delete or `DELETE`.
+
+| Method | Path                        | Success | Errors                                                                                                          |
+| ------ | --------------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/tenant-stays`      | 201     | 403 insufficient permissions · 404 resident/bed/property not found · 409 lifecycle/ownership/occupied-bed · 422 |
+| GET    | `/api/v1/tenant-stays`      | 200     | 403 insufficient permissions · 404 resident/bed not found · 422 missing query params                            |
+| GET    | `/api/v1/tenant-stays/{id}` | 200     | 403 insufficient permissions · 404 tenant stay not found                                                        |
+| PATCH  | `/api/v1/tenant-stays/{id}` | 200     | 403 insufficient permissions · 404 tenant stay not found · 409 lifecycle conflict · 422 validation              |
+
+```json
+// Create (check-in)
+POST /api/v1/tenant-stays
+Authorization: Bearer <access token>
+{ "organization_id": "…", "resident_profile_id": "…", "property_id": "…", "bed_id": "…", "start_date": "2026-01-01" }
+// Response 201
+{ "id": "…", "organization_id": "…", "resident_profile_id": "…", "property_id": "…", "bed_id": "…", "start_date": "2026-01-01", "end_date": null, "status": "ACTIVE", "notes": null, "created_at": "…", "updated_at": "…" }
+```
+
+```json
+// Update (check-out) — status and end_date close the stay together
+PATCH /api/v1/tenant-stays/{id}
+Authorization: Bearer <access token>
+{ "status": "COMPLETED", "end_date": "2026-06-30", "notes": "  Vacated early  " }
+// Response 200
+{ "id": "…", "…": "…", "status": "COMPLETED", "end_date": "2026-06-30", "notes": "Vacated early" }
+```
+
+```json
+// List (any member); optional resident_profile_id / bed_id / status narrow the result
+GET /api/v1/tenant-stays?organization_id=…&status=ACTIVE
+Authorization: Bearer <access token>
+// Response 200
+[ { "id": "…", "bed_id": "…", "resident_profile_id": "…", "status": "ACTIVE", "start_date": "2026-01-01", "end_date": null, "…": "…" } ]
+```
 
 ### Migrations (Alembic)
 
@@ -554,13 +609,13 @@ uv run pytest
 
 ```
 app/
-├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties, buildings, floors, rooms, beds, resident profiles)
+├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (JWT verification + JWKS, password hashing)
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
 ├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, enums)
 ├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
-├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, building_api, floors, floor_api, rooms, room_api, beds, bed_api, resident profiles, resident_profile_api, tenant stays)
-├── services/   business logic (auth service — registration; onboarding service; property service; building service; floor service; room service; bed service; resident profile service)
+├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, building_api, floors, floor_api, rooms, room_api, beds, bed_api, resident profiles, resident_profile_api, tenant stays, tenant_stay_api)
+├── services/   business logic (auth service — registration; onboarding service; property service; building service; floor service; room service; bed service; resident profile service; tenant stay service)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)
 tests/          pytest suite
