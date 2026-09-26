@@ -17,6 +17,7 @@ from app.schemas.property import PropertyCreate, PropertyRead
 from app.schemas.property_api import PropertyUpdate
 from app.schemas.resident_profile import ResidentProfileCreate, ResidentProfileRead
 from app.schemas.room import RoomCreate, RoomRead
+from app.schemas.room_api import RoomUpdate
 from app.schemas.tenant_stay import TenantStayCreate, TenantStayRead
 
 __all__ = [
@@ -44,6 +45,7 @@ __all__ = [
     "ResidentProfileRead",
     "RoomCreate",
     "RoomRead",
+    "RoomUpdate",
     "TenantStayCreate",
     "TenantStayRead",
 ]

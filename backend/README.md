@@ -320,6 +320,52 @@ Authorization: Bearer <access token>
 { "id": "…", "organization_id": "…", "building_id": "…", "floor_number": 2, "name": "Second", "…": "…" }
 ```
 
+### Room API
+
+Org-scoped CRUD for the third level of the physical hierarchy — rooms within a floor. Authorization mirrors the Property/Building/Floor APIs: it derives from `OrganizationMember.role` (**not** `users.role`), except the platform-wide SUPER_ADMIN bypass. A room's organization/floor is never taken from a body field beyond `organization_id`/`floor_id`; single-room routes derive them from the row itself, and list/create verify the referenced floor belongs to the caller's organization.
+
+| Role        | Read | Write |
+| ----------- | ---- | ----- |
+| OWNER       | Yes  | Yes   |
+| MANAGER     | Yes  | Yes   |
+| STAFF       | Yes  | No    |
+| SUPER_ADMIN | Yes  | Yes   |
+
+- **Endpoints** — `POST /api/v1/rooms` (201), `GET /api/v1/rooms?organization_id=<uuid>&floor_id=<uuid>`, `GET /api/v1/rooms/{id}`, `PATCH /api/v1/rooms/{id}` (`app/api/v1/routes/rooms.py`).
+- **Guard** — `require_org_roles(...)` (`app/api/permissions.py`), the org-scoped helper shared with the Property/Building/Floor APIs.
+- **Service** — `RoomService` (`app/services/room_service.py`) composes membership resolution, floor existence/ownership checks (`FloorRepository`), and room data access (`RoomRepository`).
+- **Create** (`RoomCreate`) — requires OWNER/MANAGER membership; the referenced floor must exist and belong to the same organization; duplicate `room_number` within a floor → 409 (`UNIQUE (floor_id, room_number)`).
+- **Update** (`RoomUpdate`) — only `room_number` and `room_type` are editable; `organization_id` and `floor_id` are structurally immutable (not even accepted in the request body). Changing `room_number` to a value already used in the floor → 409. Omitted fields are left unchanged.
+- **Read** — any member may list/get; missing room → 404.
+- **Capacity is derived, never stored** — a room has no `capacity`/`max_beds`/`bed_count` column, schema field, or response field. Its size is always `COUNT(beds.id)` (see Physical Structure Foundation below).
+- **Errors** — 401 unauthenticated · 403 `insufficient permissions` · 404 `room not found` / `floor not found` · 409 `room already exists` / floor-organization conflict · 422 validation.
+- **Notes** — no soft delete and no `DELETE`. Bed, resident, and tenant-stay APIs remain future milestones.
+
+| Method | Path                 | Success | Errors                                                                                         |
+| ------ | -------------------- | ------- | ---------------------------------------------------------------------------------------------- |
+| POST   | `/api/v1/rooms`      | 201     | 403 insufficient permissions · 404 floor not found · 409 duplicate/belongs-to-other-org · 422  |
+| GET    | `/api/v1/rooms`      | 200     | 403 insufficient permissions · 404 floor not found · 422 missing query params                  |
+| GET    | `/api/v1/rooms/{id}` | 200     | 403 insufficient permissions · 404 room not found                                              |
+| PATCH  | `/api/v1/rooms/{id}` | 200     | 403 insufficient permissions · 404 room not found · 409 duplicate room number · 422 validation |
+
+```json
+// Create
+POST /api/v1/rooms
+Authorization: Bearer <access token>
+{ "organization_id": "…", "floor_id": "…", "room_number": "101", "room_type": "DOUBLE" }
+// Response 201
+{ "id": "…", "organization_id": "…", "floor_id": "…", "room_number": "101", "room_type": "DOUBLE", "created_at": "…", "updated_at": "…" }
+```
+
+```json
+// Update (only provided fields change; organization_id / floor_id immutable)
+PATCH /api/v1/rooms/{id}
+Authorization: Bearer <access token>
+{ "room_number": "201", "room_type": "TRIPLE" }
+// Response 200
+{ "id": "…", "organization_id": "…", "floor_id": "…", "room_number": "201", "room_type": "TRIPLE", "…": "…" }
+```
+
 ### Physical Structure Foundation
 
 The inventory hierarchy under a property. Database + models + repositories only — no routes, services, occupancy, or assignment yet.
@@ -417,13 +463,13 @@ uv run pytest
 
 ```
 app/
-├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties, buildings, floors)
+├── api/v1/     versioned HTTP routes (health, auth/register, auth/me, auth/onboard, properties, buildings, floors, rooms)
 ├── core/       config (pydantic-settings), logging, lifespan, exceptions, security (JWT verification + JWKS, password hashing)
 ├── db/         declarative Base (naming conventions), engine/session, mixins, health
 ├── models/     SQLAlchemy models (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays, enums)
 ├── repositories/  data access (users, orgs, memberships, properties, buildings, floors, rooms, beds, resident profiles, tenant stays)
-├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, building_api, floors, floor_api, rooms, beds, resident profiles, tenant stays)
-├── services/   business logic (auth service — registration; onboarding service; property service; building service; floor service)
+├── schemas/    Pydantic request/response models (users, auth, orgs, properties, buildings, building_api, floors, floor_api, rooms, room_api, beds, resident profiles, tenant stays)
+├── services/   business logic (auth service — registration; onboarding service; property service; building service; floor service; room service)
 └── main.py     create_application() factory, exposes `app`
 alembic/        migration structure (schema change ships with a migration)
 tests/          pytest suite
