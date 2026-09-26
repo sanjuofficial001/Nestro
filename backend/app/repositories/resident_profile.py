@@ -57,6 +57,13 @@ class ResidentProfileRepository:
             .limit(1)
         ) is not None
 
+    def exists_for_member(self, organization_member_id: UUID) -> bool:
+        return self._session.scalar(
+            select(ResidentProfile.id)
+            .where(ResidentProfile.organization_member_id == organization_member_id)
+            .limit(1)
+        ) is not None
+
     def create(self, data: ResidentProfileCreate) -> ResidentProfile:
         profile = ResidentProfile(**data.model_dump())
         self._session.add(profile)
