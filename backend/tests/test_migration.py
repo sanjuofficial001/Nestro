@@ -45,6 +45,7 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
                 "resident_profiles",
                 "tenant_stays",
                 "complaints",
+                "complaint_comments",
             } <= tables
         assert "alembic_version" in tables
 
@@ -286,6 +287,33 @@ def test_upgrade_head_creates_expected_tables(tmp_path: Path) -> None:
             "ix_complaints_status",
             "ix_complaints_priority",
         } <= complaint_indexes
+
+        comment_columns = {
+            row[1] for row in conn.execute("pragma table_info(complaint_comments)")
+        }
+        assert {
+            "id",
+            "complaint_id",
+            "user_id",
+            "comment",
+            "is_internal",
+            "created_at",
+        } <= comment_columns
+        # Tenant scope rides on the parent complaint, and the row is immutable.
+        assert "organization_id" not in comment_columns
+        assert "updated_at" not in comment_columns
+        assert "deleted_at" not in comment_columns
+
+        comment_fks = {
+            row[2]
+            for row in conn.execute("pragma foreign_key_list(complaint_comments)")
+        }
+        assert comment_fks == {"complaints", "users"}
+
+        comment_indexes = {
+            row[1] for row in conn.execute("pragma index_list(complaint_comments)")
+        }
+        assert {"ix_complaint_comments_complaint_id"} <= comment_indexes
 
         version = conn.execute("select version_num from alembic_version").fetchone()
         assert version is not None and version[0]
