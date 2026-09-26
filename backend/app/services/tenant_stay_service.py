@@ -79,9 +79,9 @@ class TenantStayService:
     ) -> list[TenantStay]:
         _READ(user, self._memberships_for(user.id, organization_id))
         if resident_profile_id is not None:
-            self._check_resident(resident_profile_id, organization_id)
+            self._require_resident_in_org(resident_profile_id, organization_id)
         if bed_id is not None:
-            self._check_bed(bed_id, organization_id)
+            self._require_bed_in_org(bed_id, organization_id)
 
         if resident_profile_id is not None:
             stays = self._stays.list_for_resident(resident_profile_id, status)
@@ -157,6 +157,21 @@ class TenantStayService:
         if bed.organization_id != organization_id:
             raise ValueError("bed does not belong to this organization")
         return bed
+
+    def _require_resident_in_org(
+        self, resident_profile_id: UUID, organization_id: UUID
+    ) -> None:
+        """List filters answer 404 for a foreign-org id exactly like a missing one, so
+        filtering never reveals that a resident profile exists in another tenant."""
+        profile = self._profiles.get_by_id(resident_profile_id)
+        if profile is None or profile.organization_id != organization_id:
+            raise NotFoundError(detail="resident profile not found")
+
+    def _require_bed_in_org(self, bed_id: UUID, organization_id: UUID) -> None:
+        """Same non-leaking rule as `_require_resident_in_org`, for beds."""
+        bed = self._beds.get_by_id(bed_id)
+        if bed is None or bed.organization_id != organization_id:
+            raise NotFoundError(detail="bed not found")
 
     def _check_property(self, property_id: UUID, organization_id: UUID) -> None:
         prop = self._properties.get_by_id(property_id)

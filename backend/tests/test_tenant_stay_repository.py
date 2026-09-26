@@ -291,6 +291,44 @@ def test_list_for_bed(db_session) -> None:
     assert TenantStayRepository(db_session).list_for_bed(uuid4()) == []
 
 
+def test_list_filters_by_status(db_session) -> None:
+    org, prop, room, profile = seed_chain(db_session)
+    bed_repo = BedRepository(db_session)
+    bed1 = create_bed(bed_repo, org, room, bed_number="1")
+    bed2 = create_bed(bed_repo, org, room, bed_number="2")
+
+    create_stay(db_session, org, prop, profile, bed1, start_date=date(2026, 1, 1))
+    create_stay(
+        db_session,
+        org,
+        prop,
+        profile,
+        bed2,
+        start_date=date(2025, 1, 1),
+        status=TenantStayStatusEnum.CANCELLED,
+        end_date=date(2025, 6, 1),
+    )
+
+    repo = TenantStayRepository(db_session)
+    active = repo.list_for_org(org.id, TenantStayStatusEnum.ACTIVE)
+    assert [s.bed_id for s in active] == [bed1.id]
+
+    cancelled = repo.list_for_org(org.id, TenantStayStatusEnum.CANCELLED)
+    assert [s.bed_id for s in cancelled] == [bed2.id]
+
+    assert repo.list_for_bed(bed1.id, TenantStayStatusEnum.CANCELLED) == []
+    assert [
+        s.start_date
+        for s in repo.list_for_resident(profile.id, TenantStayStatusEnum.CANCELLED)
+    ] == [date(2025, 1, 1)]
+
+    # No filter still returns every stay, ordered by start_date desc.
+    assert [s.start_date for s in repo.list_for_org(org.id)] == [
+        date(2026, 1, 1),
+        date(2025, 1, 1),
+    ]
+
+
 def test_get_active_for_bed(db_session) -> None:
     org, prop, room, profile = seed_chain(db_session)
     bed1 = create_bed(BedRepository(db_session), org, room, bed_number="1")
